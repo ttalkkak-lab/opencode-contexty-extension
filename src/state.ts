@@ -124,7 +124,12 @@ export class MirrorState {
 	}
 
 	isChecked(uri: vscode.Uri): boolean {
-		return this.checked.has(asKey(uri));
+		const key = asKey(uri);
+		const id = this.checked.get(key);
+		if (!id) {
+			return false;
+		}
+		return !this.banned.has(id);
 	}
 
 	async toggleChecked(uri: vscode.Uri): Promise<void> {
@@ -139,15 +144,13 @@ export class MirrorState {
 		let changed = false;
 		for (const { uri, checked } of updates) {
 			const key = asKey(uri);
+			const existingId = this.checked.get(key);
 			if (checked) {
-				if (!this.checked.has(key)) {
-					this.checked.set(key, generateCustomId('prt'));
-					changed = true;
-				}
+				const newId = generateCustomId('prt');
+				this.checked.set(key, newId);
+				changed = true;
 			} else {
-				const existingId = this.checked.get(key);
 				if (existingId) {
-					this.checked.delete(key);
 					if (!this.banned.has(existingId)) {
 						this.banned.add(existingId);
 					}
@@ -169,6 +172,8 @@ export class MirrorState {
 			return;
 		}
 
+		await this.syncCheckedFromExternalParts();
+
 		// Pre-parse checked URIs once.
 		const checkedEntries: Array<{ uri: vscode.Uri; id: string }> = [];
 		for (const [key, id] of this.checked.entries()) {
@@ -188,7 +193,19 @@ export class MirrorState {
 			} catch {
 				// best-effort; ignore
 			}
-			const parts: ToolPart[] = [];
+			let existingParts: ToolPart[] = [];
+			try {
+				const raw = await vscode.workspace.fs.readFile(partsUri);
+				const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as { parts?: ToolPart[] };
+				if (Array.isArray(parsed.parts)) {
+					existingParts = parsed.parts.map(({ metadata: _omit, ...rest }) => rest as ToolPart);
+				}
+			} catch {
+				// ignore
+			}
+			const partsMap = new Map(existingParts.map((p) => [p.id, p] as const));
+
+			const parts: ToolPart[] = [...existingParts];
 			for (const { uri, id } of checkedEntries) {
 				if (uri.scheme !== 'file') {
 					continue;
@@ -212,7 +229,7 @@ export class MirrorState {
 				const messageId = generateCustomId('msg');
 				const callId = generateCustomId('call');
 				const itemId = generateOpenAIItemId();
-				parts.push({
+				const part: ToolPart = {
 					id,
 					sessionID: this.sessionId,
 					messageID: messageId,
@@ -230,16 +247,13 @@ export class MirrorState {
 						},
 						time: { start: timestamp, end: timestamp }
 					},
-					metadata: {
-						openai: {
-							itemId
-						}
-					}
-				});
+				};
+				partsMap.set(id, part);
 			}
-			parts.sort((a, b) => a.state.input.filePath.localeCompare(b.state.input.filePath));
+			const mergedParts = [...partsMap.values()];
+			mergedParts.sort((a, b) => a.state.input.filePath.localeCompare(b.state.input.filePath));
 
-			const partsContents = Buffer.from(JSON.stringify({ parts }, null, 2), 'utf8');
+			const partsContents = Buffer.from(JSON.stringify({ parts: mergedParts }, null, 2), 'utf8');
 			try {
 				await vscode.workspace.fs.writeFile(partsUri, partsContents);
 			} catch {
@@ -308,6 +322,60 @@ export class MirrorState {
 			banned: [...this.banned]
 		};
 		await this.memento.update(STATE_KEY, stored);
+	}
+
+	private async syncCheckedFromExternalParts(): Promise<void> {
+		let changed = false;
+		for (const { rootFsPathLower, contextDirUri } of this.roots) {
+			const partsUri = vscode.Uri.joinPath(contextDirUri, 'tool-parts.json');
+			let raw: Uint8Array;
+			try {
+				raw = await vscode.workspace.fs.readFile(partsUri);
+			} catch {
+				continue;
+			}
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(Buffer.from(raw).toString('utf8'));
+			} catch {
+				continue;
+			}
+			const parts = (parsed as { parts?: unknown }).parts;
+			if (!Array.isArray(parts)) {
+				continue;
+			}
+			const filePathsLower = new Set<string>();
+			for (const part of parts) {
+				if (!part || typeof part !== 'object') {
+					continue;
+				}
+				const p = part as { id?: unknown; state?: unknown };
+				const filePath = (p.state as { input?: { filePath?: unknown } } | undefined)?.input?.filePath;
+				if (typeof filePath !== 'string') {
+					continue;
+				}
+				const fsPathLower = filePath.toLowerCase();
+				if (fsPathLower === rootFsPathLower || !fsPathLower.startsWith(rootFsPathLower + path.sep)) {
+					continue;
+				}
+				filePathsLower.add(fsPathLower);
+				const id = typeof p.id === 'string' ? p.id : generateCustomId('prt');
+				if (this.banned.has(id)) {
+					continue;
+				}
+				const uri = vscode.Uri.file(filePath);
+				const key = asKey(uri);
+				if (!this.checked.has(key)) {
+					this.checked.set(key, id);
+					changed = true;
+				}
+			}
+
+			// 외부 파일에 없는 항목도 그대로 유지 (tool-parts.json을 건드리지 않음)
+		}
+		if (changed) {
+			await this.save();
+		}
 	}
 
 	private loadOrCreateSessionId(): string {
