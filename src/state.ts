@@ -2,6 +2,27 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as path from 'path';
 
+type ToolPart = {
+	id: string;
+	sessionID: string;
+	messageID: string;
+	type: 'tool';
+	callID: string;
+	tool: string;
+	state: {
+		status: string;
+		input: { filePath: string };
+		output?: string;
+		title?: string;
+		metadata?: {
+			preview?: string;
+			truncated?: boolean;
+		};
+		time?: { start: number; end: number };
+	};
+	metadata?: Record<string, unknown>;
+};
+
 type StoredStateV2 = {
 	version: 2;
 	checked: string[];
@@ -19,6 +40,7 @@ type StoredStateV4 = {
 };
 
 const STATE_KEY = 'kciMirror.state';
+const SESSION_KEY = 'kciMirror.sessionId';
 
 function asKey(uri: vscode.Uri): string {
 	// Use full URI string so multi-root workspaces stay unique.
@@ -36,29 +58,64 @@ function generateCustomId(prefix: string): string {
 	return `${prefix}_${timestampHex}${randomPart}`;
 }
 
+function generateOpenAIItemId(): string {
+	// Match shape: fc_ + 50 hex chars (25 bytes)
+	return `fc_${crypto.randomBytes(25).toString('hex')}`;
+}
+
+async function formatFileWithNumbers(uri: vscode.Uri): Promise<{
+	output: string;
+	preview: string;
+	truncated: boolean;
+	lineCount: number;
+}> {
+	try {
+		const buf = await vscode.workspace.fs.readFile(uri);
+		const text = buf.toString('utf8');
+		const lines = text.split(/\r?\n/);
+		const numbered = lines.map((line, idx) => `${String(idx + 1).padStart(5, '0')}| ${line}`);
+		const bodyWithNumbers = numbered.join('\n');
+		const endLine = `(End of file - total ${lines.length} lines)`;
+		const output = `<file>\n${bodyWithNumbers}\n\n${endLine}\n</file>`;
+		const rawBody = lines.join('\n');
+		const maxPreviewLen = 1000;
+		const truncated = rawBody.length > maxPreviewLen;
+		const previewBody = truncated ? rawBody.slice(0, maxPreviewLen) : rawBody;
+		const preview = previewBody;
+		return { output, preview, truncated, lineCount: lines.length };
+	} catch {
+		return { output: '', preview: '', truncated: false, lineCount: 0 };
+	}
+}
+
 export class MirrorState {
 	// Key: full URI string (uri.toString()), Value: stable generated id.
 	private checked = new Map<string, string>();
 	private banned = new Set<string>();
 	private readonly roots: Array<{
 		rootFsPathLower: string;
+		contextDirUri: vscode.Uri;
 		partsUri: vscode.Uri;
 		banUri: vscode.Uri;
 	}>;
+	private readonly sessionId: string;
 
 	constructor(
 		private readonly memento: vscode.Memento,
 		workspaceFolders?: readonly vscode.WorkspaceFolder[]
 	) {
+		this.sessionId = this.loadOrCreateSessionId();
 		// Persist checked files at each workspace root.
 		this.roots = (workspaceFolders ?? [])
 			.filter((wf) => wf.uri.scheme === 'file')
 			.map((wf) => {
 				const rootFsPathLower = wf.uri.fsPath.toLowerCase();
+				const contextDirUri = vscode.Uri.joinPath(wf.uri, '.contexty');
 				return {
 					rootFsPathLower,
-					partsUri: vscode.Uri.joinPath(wf.uri, 'parts.json'),
-					banUri: vscode.Uri.joinPath(wf.uri, 'ban.json')
+					contextDirUri,
+					partsUri: vscode.Uri.joinPath(contextDirUri, 'tool-parts.json'),
+					banUri: vscode.Uri.joinPath(contextDirUri, 'tool-parts.blacklist.json')
 				};
 			});
 		this.load();
@@ -125,8 +182,13 @@ export class MirrorState {
 		const banned = [...this.banned];
 		banned.sort((a, b) => a.localeCompare(b));
 
-		for (const { rootFsPathLower, partsUri, banUri } of this.roots) {
-			const checked: Array<{ id: string; path: string }> = [];
+		for (const { rootFsPathLower, contextDirUri, partsUri, banUri } of this.roots) {
+			try {
+				await vscode.workspace.fs.createDirectory(contextDirUri);
+			} catch {
+				// best-effort; ignore
+			}
+			const parts: ToolPart[] = [];
 			for (const { uri, id } of checkedEntries) {
 				if (uri.scheme !== 'file') {
 					continue;
@@ -145,18 +207,46 @@ export class MirrorState {
 					continue;
 				}
 
-				checked.push({ id, path: uri.fsPath });
+				const timestamp = Date.now();
+				const { output, preview, truncated } = await formatFileWithNumbers(uri);
+				const messageId = generateCustomId('msg');
+				const callId = generateCustomId('call');
+				const itemId = generateOpenAIItemId();
+				parts.push({
+					id,
+					sessionID: this.sessionId,
+					messageID: messageId,
+					type: 'tool',
+					callID: callId,
+					tool: 'read',
+					state: {
+						status: 'completed',
+						input: { filePath: uri.fsPath },
+						output,
+						title: uri.fsPath,
+						metadata: {
+							preview,
+							truncated
+						},
+						time: { start: timestamp, end: timestamp }
+					},
+					metadata: {
+						openai: {
+							itemId
+						}
+					}
+				});
 			}
-			checked.sort((a, b) => a.path.localeCompare(b.path));
+			parts.sort((a, b) => a.state.input.filePath.localeCompare(b.state.input.filePath));
 
-			const partsContents = Buffer.from(JSON.stringify({ checked }, null, 2), 'utf8');
+			const partsContents = Buffer.from(JSON.stringify({ parts }, null, 2), 'utf8');
 			try {
 				await vscode.workspace.fs.writeFile(partsUri, partsContents);
 			} catch {
 				// Ignore file sync errors; workspaceState is still the source of truth.
 			}
 
-			const banContents = Buffer.from(JSON.stringify({ banned }, null, 2), 'utf8');
+			const banContents = Buffer.from(JSON.stringify({ ids: banned }, null, 2), 'utf8');
 			try {
 				await vscode.workspace.fs.writeFile(banUri, banContents);
 			} catch {
@@ -218,5 +308,15 @@ export class MirrorState {
 			banned: [...this.banned]
 		};
 		await this.memento.update(STATE_KEY, stored);
+	}
+
+	private loadOrCreateSessionId(): string {
+		const existing = this.memento.get<string>(SESSION_KEY);
+		if (existing && typeof existing === 'string') {
+			return existing;
+		}
+		const fresh = generateCustomId('ses');
+		void this.memento.update(SESSION_KEY, fresh);
+		return fresh;
 	}
 }

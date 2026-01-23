@@ -1,0 +1,88 @@
+{
+  "parts": [
+    {
+      "id": "prt_pkgjson0",
+      "sessionID": "ses_analysis_20250124",
+      "messageID": "msg_pkgjson0",
+      "type": "tool",
+      "callID": "call_pkgjson0",
+      "tool": "read",
+      "state": {
+        "status": "completed",
+        "input": {
+          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\package.json"
+        }
+      }
+    },
+    {
+      "id": "prt_readme0",
+      "sessionID": "ses_analysis_20250124",
+      "messageID": "msg_readme0",
+      "type": "tool",
+      "callID": "call_readme0",
+      "tool": "read",
+      "state": {
+        "status": "completed",
+        "input": {
+          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\README.md"
+        }
+      }
+    },
+    {
+      "id": "prt_extension0",
+      "sessionID": "ses_analysis_20250124",
+      "messageID": "msg_extension0",
+      "type": "tool",
+      "callID": "call_extension0",
+      "tool": "read",
+      "state": {
+        "status": "completed",
+        "input": {
+          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\src\\extension.ts"
+        }
+      }
+    },
+    {
+      "id": "prt_state0",
+      "sessionID": "ses_analysis_20250124",
+      "messageID": "msg_state0",
+      "type": "tool",
+      "callID": "call_state0",
+      "tool": "read",
+      "state": {
+        "status": "completed",
+        "input": {
+          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\src\\state.ts"
+        }
+      }
+    },
+    {
+      "id": "prt_mirrorExplorer0",
+      "sessionID": "ses_analysis_20250124",
+      "messageID": "msg_mirrorExplorer0",
+      "type": "tool",
+      "callID": "call_mirrorExplorer0",
+      "tool": "read",
+      "state": {
+        "status": "completed",
+        "input": {
+          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\src\\mirrorExplorer.ts"
+        }
+      }
+    },
+    {
+      "id": "prt_decorations0",
+      "sessionID": "ses_analysis_20250124",
+      "messageID": "msg_decorations0",
+      "type": "tool",
+      "callID": "call_decorations0",
+      "tool": "read",
+      "state": {
+        "status": "completed",
+        "input": {
+          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\src\\decorations.ts"
+        }
+      }
+    }
+  ]
+}
