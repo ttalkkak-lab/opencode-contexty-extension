@@ -1,0 +1,103 @@
+{
+  "name": "kci-mirror",
+  "displayName": "Korea Click Institute",
+  "description": "Korea Click Institute",
+  "publisher": "kci",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:kciMirror.explorer"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "kciMirror.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kciMirror.check",
+        "title": "Check",
+        "icon": {
+          "light": "resources/icons/check-light.svg",
+          "dark": "resources/icons/check-dark.svg"
+        }
+      },
+      {
+        "command": "kciMirror.uncheck",
+        "title": "Uncheck",
+        "icon": {
+          "light": "resources/icons/uncheck-light.svg",
+          "dark": "resources/icons/uncheck-dark.svg"
+        }
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kciMirror",
+          "title": "KCI",
+          "icon": "resources/kci.svg"
+        }
+      ]
+    },
+    "views": {
+      "kciMirror": [
+        {
+          "id": "kciMirror.explorer",
+          "name": "Mirror Explorer"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "kciMirror.refresh",
+          "when": "view == kciMirror.explorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "kciMirror.check",
+          "when": "view == kciMirror.explorer && viewItem == kciMirror.file.unchecked",
+          "group": "inline"
+        },
+        {
+          "command": "kciMirror.uncheck",
+          "when": "view == kciMirror.explorer && viewItem == kciMirror.file.checked",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "KCI Mirror",
+      "properties": {}
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.108.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.52.0",
+    "eslint": "^9.39.2",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
