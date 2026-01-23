@@ -14,10 +14,6 @@ type ToolPart = {
 		input: { filePath: string };
 		output?: string;
 		title?: string;
-		metadata?: {
-			preview?: string;
-			truncated?: boolean;
-		};
 		time?: { start: number; end: number };
 	};
 	metadata?: Record<string, unknown>;
@@ -198,7 +194,11 @@ export class MirrorState {
 				const raw = await vscode.workspace.fs.readFile(partsUri);
 				const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as { parts?: ToolPart[] };
 				if (Array.isArray(parsed.parts)) {
-					existingParts = parsed.parts.map(({ metadata: _omit, ...rest }) => rest as ToolPart);
+					existingParts = parsed.parts.map((p) => {
+						const { metadata: _omit1, state, ...rest } = p as any;
+						const { metadata: _omit2, ...stateRest } = (state ?? {}) as any;
+						return { ...rest, state: stateRest } as ToolPart;
+					});
 				}
 			} catch {
 				// ignore
@@ -225,7 +225,7 @@ export class MirrorState {
 				}
 
 				const timestamp = Date.now();
-				const { output, preview, truncated } = await formatFileWithNumbers(uri);
+				const { output } = await formatFileWithNumbers(uri);
 				const messageId = generateCustomId('msg');
 				const callId = generateCustomId('call');
 				const itemId = generateOpenAIItemId();
@@ -241,10 +241,6 @@ export class MirrorState {
 						input: { filePath: uri.fsPath },
 						output,
 						title: uri.fsPath,
-						metadata: {
-							preview,
-							truncated
-						},
 						time: { start: timestamp, end: timestamp }
 					},
 				};
