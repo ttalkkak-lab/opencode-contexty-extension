@@ -137,6 +137,9 @@ export class MirrorState {
 	}
 
 	async setCheckedMany(updates: Array<{ uri: vscode.Uri; checked: boolean }>): Promise<void> {
+		// 먼저 JSON에서 현재 상태를 로드
+		await this.syncCheckedFromExternalParts();
+
 		let changed = false;
 		for (const { uri, checked } of updates) {
 			const key = asKey(uri);
@@ -159,7 +162,6 @@ export class MirrorState {
 			return;
 		}
 
-		await this.save();
 		await this.writeCheckedFile();
 	}
 
@@ -167,8 +169,6 @@ export class MirrorState {
 		if (this.roots.length === 0) {
 			return;
 		}
-
-		await this.syncCheckedFromExternalParts();
 
 		// Pre-parse checked URIs once.
 		const checkedEntries: Array<{ uri: vscode.Uri; id: string }> = [];
@@ -266,63 +266,36 @@ export class MirrorState {
 	}
 
 	private load(): void {
-		const storedAny = this.memento.get<unknown>(STATE_KEY);
-		if (!storedAny || typeof storedAny !== 'object') {
-			return;
-		}
-
-		// Migration: version 1 stored `pinned` and `ignored`. We convert both into a single
-		// `checked` set (union) so users don't lose their previous marks.
-		const storedV1 = storedAny as { version?: unknown; pinned?: unknown; ignored?: unknown };
-		if (storedV1.version === 1) {
-			const pinned = Array.isArray(storedV1.pinned) ? storedV1.pinned : [];
-			const ignored = Array.isArray(storedV1.ignored) ? storedV1.ignored : [];
-			this.checked = new Map(
-				[...(pinned as string[]), ...(ignored as string[])].map((uriStr) => [uriStr, generateCustomId('prt')])
-			);
-			return;
-		}
-
-		const storedV4 = storedAny as StoredStateV4;
-		if (storedV4.version === 4) {
-			this.checked = new Map(
-				(storedV4.checked ?? [])
-					.filter((x) => x && typeof x.uri === 'string' && typeof x.id === 'string')
-					.map((x) => [x.uri, x.id])
-			);
-			this.banned = new Set((storedV4.banned ?? []).filter((x) => typeof x === 'string'));
-			return;
-		}
-
-		const storedV3 = storedAny as StoredStateV3;
-		if (storedV3.version === 3) {
-			this.checked = new Map(
-				(storedV3.checked ?? [])
-					.filter((x) => x && typeof x.uri === 'string' && typeof x.id === 'string')
-					.map((x) => [x.uri, x.id])
-			);
-			return;
-		}
-
-		const storedV2 = storedAny as StoredStateV2;
-		if (storedV2.version !== 2) {
-			return;
-		}
-		this.checked = new Map((storedV2.checked ?? []).map((uriStr) => [uriStr, generateCustomId('prt')]));
+		// JSON 파일에서 직접 읽음 (memento 무시)
+		this.checked = new Map();
+		this.banned = new Set();
 	}
 
-	private async save(): Promise<void> {
-		const stored: StoredStateV4 = {
-			version: 4,
-			checked: [...this.checked.entries()].map(([uri, id]) => ({ uri, id })),
-			banned: [...this.banned]
-		};
-		await this.memento.update(STATE_KEY, stored);
-	}
+
 
 	private async syncCheckedFromExternalParts(): Promise<void> {
-		let changed = false;
+		// JSON 파일에서 checked와 banned를 새로 로드 (memento 무시)
+		this.checked = new Map();
+		this.banned = new Set();
+
 		for (const { rootFsPathLower, contextDirUri } of this.roots) {
+			// blacklist 로드
+			const banUri = vscode.Uri.joinPath(contextDirUri, 'tool-parts.blacklist.json');
+			try {
+				const banRaw = await vscode.workspace.fs.readFile(banUri);
+				const banParsed = JSON.parse(Buffer.from(banRaw).toString('utf8')) as { ids?: unknown };
+				if (Array.isArray(banParsed.ids)) {
+					for (const id of banParsed.ids) {
+						if (typeof id === 'string') {
+							this.banned.add(id);
+						}
+					}
+				}
+			} catch {
+				// 파일 없거나 파싱 실패시 무시
+			}
+
+			// parts 로드
 			const partsUri = vscode.Uri.joinPath(contextDirUri, 'tool-parts.json');
 			let raw: Uint8Array;
 			try {
@@ -340,7 +313,6 @@ export class MirrorState {
 			if (!Array.isArray(parts)) {
 				continue;
 			}
-			const filePathsLower = new Set<string>();
 			for (const part of parts) {
 				if (!part || typeof part !== 'object') {
 					continue;
@@ -354,7 +326,6 @@ export class MirrorState {
 				if (fsPathLower === rootFsPathLower || !fsPathLower.startsWith(rootFsPathLower + path.sep)) {
 					continue;
 				}
-				filePathsLower.add(fsPathLower);
 				const id = typeof p.id === 'string' ? p.id : generateCustomId('prt');
 				if (this.banned.has(id)) {
 					continue;
@@ -363,14 +334,8 @@ export class MirrorState {
 				const key = asKey(uri);
 				if (!this.checked.has(key)) {
 					this.checked.set(key, id);
-					changed = true;
 				}
 			}
-
-			// 외부 파일에 없는 항목도 그대로 유지 (tool-parts.json을 건드리지 않음)
-		}
-		if (changed) {
-			await this.save();
 		}
 	}
 
