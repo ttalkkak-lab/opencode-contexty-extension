@@ -30,6 +30,11 @@
         "command": "kciMirror.removePart",
         "title": "Remove from Context",
         "icon": "$(close)"
+      },
+      {
+        "command": "kciMirror.removeFileContext",
+        "title": "Remove File from Context",
+        "icon": "$(close)"
       }
     ],
     "views": {
@@ -52,6 +57,11 @@
         {
           "command": "kciMirror.removePart",
           "when": "view == kciMirror.explorer && viewItem == kciMirror.part",
+          "group": "inline"
+        },
+        {
+          "command": "kciMirror.removeFileContext",
+          "when": "view == kciMirror.explorer && viewItem == kciMirror.file.full",
           "group": "inline"
         }
       ]

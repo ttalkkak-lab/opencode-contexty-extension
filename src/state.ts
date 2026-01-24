@@ -104,6 +104,10 @@ function summarizeToolPart(part: ToolPart): { label: string; tooltip: string } {
 	return { label, tooltip };
 }
 
+function isFullFilePart(part: ToolPart): boolean {
+	return part.state.metadata?.truncated === false;
+}
+
 async function formatFileWithNumbers(uri: vscode.Uri): Promise<{
 	output: string;
 	preview: string;
@@ -183,6 +187,15 @@ export class MirrorState {
 		return this.partsByFile.get(key)?.length ?? 0;
 	}
 
+	getPartIdsForFile(uri: vscode.Uri): string[] {
+		const key = asKey(uri);
+		const parts = this.partsByFile.get(key);
+		if (!parts) {
+			return [];
+		}
+		return parts.map((part) => part.id);
+	}
+
 	getRootsWithParts(): Array<{ uri: vscode.Uri; label: string }> {
 		const rootsWithParts = new Set<string>();
 		for (const { rootUri } of this.roots) {
@@ -245,7 +258,9 @@ export class MirrorState {
 		return { dirs: dirEntries, files: fileEntries };
 	}
 
-	getPartsForFile(uri: vscode.Uri): Array<{ id: string; label: string; tooltip: string }> {
+	getPartsForFile(
+		uri: vscode.Uri
+	): Array<{ id: string; label: string; tooltip: string; truncated: boolean }> {
 		const key = asKey(uri);
 		const parts = this.partsByFile.get(key);
 		if (!parts || parts.length === 0) {
@@ -261,7 +276,7 @@ export class MirrorState {
 		});
 		return sorted.map((part) => {
 			const { label, tooltip } = summarizeToolPart(part);
-			return { id: part.id, label, tooltip };
+			return { id: part.id, label, tooltip, truncated: !isFullFilePart(part) };
 		});
 	}
 
@@ -465,11 +480,7 @@ export class MirrorState {
 				const raw = await vscode.workspace.fs.readFile(partsUri);
 				const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as { parts?: ToolPart[] };
 				if (Array.isArray(parsed.parts)) {
-					existingParts = parsed.parts.map((p) => {
-						const { metadata: _omit1, state, ...rest } = p as any;
-						const { metadata: _omit2, ...stateRest } = (state ?? {}) as any;
-						return { ...rest, state: stateRest } as ToolPart;
-					});
+					existingParts = parsed.parts;
 				}
 			} catch {
 				// ignore
@@ -496,7 +507,7 @@ export class MirrorState {
 				}
 
 				const timestamp = Date.now();
-				const { output } = await formatFileWithNumbers(uri);
+				const { output, preview, truncated } = await formatFileWithNumbers(uri);
 				const messageId = generateCustomId('msg');
 				const callId = generateCustomId('call');
 				const itemId = generateOpenAIItemId();
@@ -512,6 +523,7 @@ export class MirrorState {
 						input: { filePath: uri.fsPath },
 						output,
 						title: uri.fsPath,
+						metadata: { preview, truncated },
 						time: { start: timestamp, end: timestamp }
 					},
 				};

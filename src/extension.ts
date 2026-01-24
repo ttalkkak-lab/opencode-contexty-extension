@@ -56,10 +56,27 @@ export function activate(context: vscode.ExtensionContext) {
 			await state.banPart(node.partId);
 			provider.refresh();
 			highlights.refreshAll();
-		})
+		}),
+		vscode.commands.registerCommand(
+			'kciMirror.removeFileContext',
+			async (node: MirrorNode | undefined) => {
+				if (!node || node.type !== 'file') {
+					return;
+				}
+				const partIds = state.getPartIdsForFile(node.uri);
+				for (const partId of partIds) {
+					await state.banPart(partId);
+				}
+				provider.refresh();
+				highlights.refreshAll();
+			}
+		)
 	);
 
-	highlights.refreshAll();
+	void state.refreshFromDisk().then(() => {
+		provider.refresh();
+		highlights.refreshAll();
+	});
 }
 
 // This method is called when your extension is deactivated

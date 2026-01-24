@@ -9,6 +9,7 @@ export type MirrorNode = {
 	label: string;
 	partId?: string;
 	tooltip?: string;
+	partTruncated?: boolean;
 };
 
 export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNode> {
@@ -81,7 +82,7 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 			item.iconPath = new vscode.ThemeIcon('folder');
 		}
 		if (node.type === 'part') {
-			item.iconPath = new vscode.ThemeIcon('symbol-snippet');
+			item.iconPath = new vscode.ThemeIcon(node.partTruncated === false ? 'symbol-file' : 'symbol-snippet');
 		}
 
 		if (node.type === 'part') {
@@ -127,7 +128,8 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 				uri: node.uri,
 				label: part.label,
 				partId: part.id,
-				tooltip: part.tooltip
+				tooltip: part.tooltip,
+				partTruncated: part.truncated
 			}));
 		}
 
