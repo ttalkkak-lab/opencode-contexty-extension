@@ -7,9 +7,7 @@ export class MirrorContextHighlights implements vscode.Disposable {
 	constructor(private readonly state: MirrorState) {
 		this.decoration = vscode.window.createTextEditorDecorationType({
 			isWholeLine: true,
-			borderStyle: 'solid',
-			borderWidth: '0 0 0 3px',
-			borderColor: new vscode.ThemeColor('editorGutter.modifiedBackground')
+			backgroundColor: 'rgba(120, 190, 255, 0.18)'
 		});
 	}
 
