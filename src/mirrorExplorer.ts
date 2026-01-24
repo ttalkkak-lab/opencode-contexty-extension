@@ -49,6 +49,8 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 				? partCount > 0
 					? vscode.TreeItemCollapsibleState.Collapsed
 					: vscode.TreeItemCollapsibleState.None
+				: node.type === 'part'
+					? vscode.TreeItemCollapsibleState.None
 				: node.type === 'root'
 					? vscode.TreeItemCollapsibleState.Expanded
 					: vscode.TreeItemCollapsibleState.Collapsed;
@@ -77,6 +79,9 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 		}
 		if (node.type === 'dir') {
 			item.iconPath = new vscode.ThemeIcon('folder');
+		}
+		if (node.type === 'part') {
+			item.iconPath = new vscode.ThemeIcon('symbol-snippet');
 		}
 
 		if (node.type === 'part') {
