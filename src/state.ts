@@ -14,6 +14,7 @@ type ToolPart = {
 		input: { filePath: string };
 		output?: string;
 		title?: string;
+		metadata?: { preview: string; truncated: boolean };
 		time?: { start: number; end: number };
 	};
 	metadata?: Record<string, unknown>;

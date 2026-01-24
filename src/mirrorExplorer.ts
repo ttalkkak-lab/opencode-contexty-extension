@@ -109,12 +109,12 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 			if (roots.length === 1) {
 				const children = this.state.getChildrenForPath(roots[0].uri);
 				return [
-					...children.dirs.map((dir) => ({ type: 'dir', uri: dir.uri, label: dir.label })),
-					...children.files.map((file) => ({ type: 'file', uri: file.uri, label: file.label }))
+					...children.dirs.map((dir) => ({ type: 'dir' as const, uri: dir.uri, label: dir.label })),
+					...children.files.map((file) => ({ type: 'file' as const, uri: file.uri, label: file.label }))
 				];
 			}
 			return roots.map((root) => ({
-				type: 'root',
+				type: 'root' as const,
 				uri: root.uri,
 				label: root.label
 			}));
@@ -133,8 +133,8 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 
 		const children = this.state.getChildrenForPath(node.uri);
 		return [
-			...children.dirs.map((dir) => ({ type: 'dir', uri: dir.uri, label: dir.label })),
-			...children.files.map((file) => ({ type: 'file', uri: file.uri, label: file.label }))
+			...children.dirs.map((dir) => ({ type: 'dir' as const, uri: dir.uri, label: dir.label })),
+			...children.files.map((file) => ({ type: 'file' as const, uri: file.uri, label: file.label }))
 		];
 	}
 }
