@@ -329,11 +329,17 @@ export class MirrorState {
 			return;
 		}
 
+		const startLine = selection.start.line;
+		const fullEnd = document.lineAt(document.lineCount - 1).range.end;
+		const isFullSelection =
+			selection.start.isEqual(new vscode.Position(0, 0)) &&
+			(selection.end.isEqual(fullEnd) ||
+				(selection.end.line === document.lineCount && selection.end.character === 0));
+
 		let endLine = selection.end.line;
 		if (selection.end.character === 0 && selection.end.line > selection.start.line) {
 			endLine = selection.end.line - 1;
 		}
-		const startLine = selection.start.line;
 		if (endLine < startLine) {
 			return;
 		}
@@ -346,8 +352,12 @@ export class MirrorState {
 
 		const totalLines = document.lineCount;
 		const output = `<file>\n${numberedLines.join('\n')}\n\n(Excerpt lines ${startLine + 1}-${endLine + 1} of total ${totalLines} lines)\n</file>`;
+		const previewLimit = 1000;
+		const preview = output.slice(0, previewLimit);
+		const truncated = !isFullSelection;
 
 		const timestamp = Date.now();
+		const title = path.relative(root.rootUri.fsPath, document.uri.fsPath) || document.uri.fsPath;
 		const part: ToolPart = {
 			id: generateCustomId('prt'),
 			sessionID: this.sessionId,
@@ -359,7 +369,8 @@ export class MirrorState {
 				status: 'completed',
 				input: { filePath: document.uri.fsPath },
 				output,
-				title: document.uri.fsPath,
+				title,
+				metadata: { preview, truncated },
 				time: { start: timestamp, end: timestamp }
 			}
 		};
