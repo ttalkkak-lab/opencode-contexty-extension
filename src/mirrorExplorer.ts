@@ -1,22 +1,15 @@
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { MirrorState } from './state';
 
-export type MirrorNodeType = 'root' | 'dir' | 'file';
+export type MirrorNodeType = 'root' | 'dir' | 'file' | 'part';
 
 export type MirrorNode = {
 	type: MirrorNodeType;
 	uri: vscode.Uri;
 	label: string;
+	partId?: string;
+	tooltip?: string;
 };
-
-function sortLikeExplorer(a: { name: string; isDir: boolean }, b: { name: string; isDir: boolean }): number {
-	// Folders first
-	if (a.isDir !== b.isDir) {
-		return a.isDir ? -1 : 1;
-	}
-	return a.name.localeCompare(b.name);
-}
 
 export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNode> {
 	private readonly treeChangeEmitter = new vscode.EventEmitter<MirrorNode | undefined | null | void>();
@@ -49,11 +42,13 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 	}
 
 	getTreeItem(node: MirrorNode): vscode.TreeItem {
-		const isChecked = this.state.isChecked(node.uri);
+		const partCount = node.type === 'file' ? this.state.getPartCountForFile(node.uri) : 0;
 
 		const collapsibleState =
 			node.type === 'file'
-				? vscode.TreeItemCollapsibleState.None
+				? partCount > 0
+					? vscode.TreeItemCollapsibleState.Collapsed
+					: vscode.TreeItemCollapsibleState.None
 				: node.type === 'root'
 					? vscode.TreeItemCollapsibleState.Expanded
 					: vscode.TreeItemCollapsibleState.Collapsed;
@@ -61,21 +56,31 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 		const itemLabel =
 			node.type === 'root'
 				? node.label
-				: node.type === 'file'
-					? `${node.label}  ${isChecked ? '[x]' : '[ ]'}`
-					: node.label;
+				: node.label;
 		const item = new vscode.TreeItem(itemLabel, collapsibleState);
 		item.resourceUri = node.uri;
 		if (node.type === 'root') {
 			item.contextValue = 'kciMirror.root';
+		} else if (node.type === 'part') {
+			item.contextValue = 'kciMirror.part';
 		} else {
-			item.contextValue =
-				node.type === 'file'
-					? `kciMirror.file.${isChecked ? 'checked' : 'unchecked'}`
-					: 'kciMirror.dir';
+			item.contextValue = node.type === 'file' ? 'kciMirror.file' : 'kciMirror.dir';
 		}
 
 		if (node.type === 'file') {
+			item.iconPath = new vscode.ThemeIcon('file');
+			item.command = {
+				command: 'vscode.open',
+				title: 'Open',
+				arguments: [node.uri]
+			};
+		}
+		if (node.type === 'dir') {
+			item.iconPath = new vscode.ThemeIcon('folder');
+		}
+
+		if (node.type === 'part') {
+			item.tooltip = node.tooltip ?? node.label;
 			item.command = {
 				command: 'vscode.open',
 				title: 'Open',
@@ -94,42 +99,37 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 		}
 
 		if (!node) {
-			return vscode.workspace.workspaceFolders.map((wf) => ({
+			await this.state.refreshFromDisk();
+			const roots = this.state.getRootsWithParts();
+			if (roots.length === 1) {
+				const children = this.state.getChildrenForPath(roots[0].uri);
+				return [
+					...children.dirs.map((dir) => ({ type: 'dir', uri: dir.uri, label: dir.label })),
+					...children.files.map((file) => ({ type: 'file', uri: file.uri, label: file.label }))
+				];
+			}
+			return roots.map((root) => ({
 				type: 'root',
-				uri: wf.uri,
-				label: wf.name
+				uri: root.uri,
+				label: root.label
 			}));
 		}
 
 		if (node.type === 'file') {
-			return [];
+			const parts = this.state.getPartsForFile(node.uri);
+			return parts.map((part) => ({
+				type: 'part',
+				uri: node.uri,
+				label: part.label,
+				partId: part.id,
+				tooltip: part.tooltip
+			}));
 		}
 
-		let entries: [string, vscode.FileType][];
-		try {
-			entries = await vscode.workspace.fs.readDirectory(node.uri);
-		} catch {
-			return [];
-		}
-
-		const children = entries
-			.map(([name, fileType]) => {
-				const uri = vscode.Uri.joinPath(node.uri, name);
-				const isDir = (fileType & vscode.FileType.Directory) === vscode.FileType.Directory;
-				const type: MirrorNodeType = isDir ? 'dir' : 'file';
-				return {
-					name,
-					isDir,
-					node: {
-						type,
-						uri,
-						label: name
-					} satisfies MirrorNode
-				};
-			})
-			.sort(sortLikeExplorer)
-			.map(({ node: child }) => child);
-
-		return children;
+		const children = this.state.getChildrenForPath(node.uri);
+		return [
+			...children.dirs.map((dir) => ({ type: 'dir', uri: dir.uri, label: dir.label })),
+			...children.files.map((file) => ({ type: 'file', uri: file.uri, label: file.label }))
+		];
 	}
 }

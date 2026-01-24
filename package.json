@@ -23,33 +23,17 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "kciMirror.check",
-        "title": "Check",
-        "icon": {
-          "light": "resources/icons/check-light.svg",
-          "dark": "resources/icons/check-dark.svg"
-        }
+        "command": "kciMirror.addSelectionToContext",
+        "title": "Add Selection to Context"
       },
       {
-        "command": "kciMirror.uncheck",
-        "title": "Uncheck",
-        "icon": {
-          "light": "resources/icons/uncheck-light.svg",
-          "dark": "resources/icons/uncheck-dark.svg"
-        }
+        "command": "kciMirror.removePart",
+        "title": "Remove from Context",
+        "icon": "$(close)"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "kciMirror",
-          "title": "KCI",
-          "icon": "resources/kci.svg"
-        }
-      ]
-    },
     "views": {
-      "kciMirror": [
+      "explorer": [
         {
           "id": "kciMirror.explorer",
           "name": "Mirror Explorer"
@@ -66,13 +50,8 @@
       ],
       "view/item/context": [
         {
-          "command": "kciMirror.check",
-          "when": "view == kciMirror.explorer && viewItem == kciMirror.file.unchecked",
-          "group": "inline"
-        },
-        {
-          "command": "kciMirror.uncheck",
-          "when": "view == kciMirror.explorer && viewItem == kciMirror.file.checked",
+          "command": "kciMirror.removePart",
+          "when": "view == kciMirror.explorer && viewItem == kciMirror.part",
           "group": "inline"
         }
       ]
