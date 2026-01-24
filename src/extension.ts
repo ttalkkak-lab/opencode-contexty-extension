@@ -3,18 +3,20 @@ import * as vscode from 'vscode';
 import { MirrorExplorerProvider, MirrorNode } from './mirrorExplorer';
 import { MirrorState } from './state';
 import { SelectionLensProvider } from './selectionLens';
+import { MirrorContextHighlights } from './contextHighlights';
 
 export function activate(context: vscode.ExtensionContext) {
 	const workspaceFolders = vscode.workspace.workspaceFolders;
 	const state = new MirrorState(context.workspaceState, workspaceFolders);
 	const provider = new MirrorExplorerProvider(state, context.subscriptions);
 	const selectionLens = new SelectionLensProvider();
+	const highlights = new MirrorContextHighlights(state);
 
 	const treeView = vscode.window.createTreeView('kciMirror.explorer', {
 		treeDataProvider: provider,
 		showCollapseAll: true
 	});
-	context.subscriptions.push(treeView);
+	context.subscriptions.push(treeView, highlights);
 
 	context.subscriptions.push(
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, selectionLens),
@@ -27,8 +29,15 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
+		vscode.window.onDidChangeActiveTextEditor(() => {
+			highlights.refreshAll();
+		}),
+		vscode.window.onDidChangeVisibleTextEditors(() => {
+			highlights.refreshAll();
+		}),
 		vscode.commands.registerCommand('kciMirror.refresh', () => {
 			provider.refresh();
+			highlights.refreshAll();
 		}),
 		vscode.commands.registerCommand(
 			'kciMirror.addSelectionToContext',
@@ -37,6 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
 				await state.addSelectionPart(doc, selection);
 				selectionLens.clearSelection(uri);
 				provider.refresh();
+				highlights.refreshAll();
 			}
 		),
 		vscode.commands.registerCommand('kciMirror.removePart', async (node: MirrorNode | undefined) => {
@@ -45,8 +55,11 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 			await state.banPart(node.partId);
 			provider.refresh();
+			highlights.refreshAll();
 		})
 	);
+
+	highlights.refreshAll();
 }
 
 // This method is called when your extension is deactivated

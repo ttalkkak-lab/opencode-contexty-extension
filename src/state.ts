@@ -264,6 +264,41 @@ export class MirrorState {
 		});
 	}
 
+	getLineRangesForFile(uri: vscode.Uri): Array<{ start: number; end: number }> {
+		const key = asKey(uri);
+		const parts = this.partsByFile.get(key);
+		if (!parts || parts.length === 0) {
+			return [];
+		}
+		const ranges: Array<{ start: number; end: number }> = [];
+		for (const part of parts) {
+			const output = typeof part.state.output === 'string' ? part.state.output : '';
+			const lines = output.split(/\r?\n/);
+			let minLine: number | undefined;
+			let maxLine: number | undefined;
+			for (const line of lines) {
+				const match = line.match(/^(\d+)\|\s?/);
+				if (!match) {
+					continue;
+				}
+				const lineNo = Number.parseInt(match[1], 10);
+				if (Number.isNaN(lineNo)) {
+					continue;
+				}
+				if (minLine === undefined || lineNo < minLine) {
+					minLine = lineNo;
+				}
+				if (maxLine === undefined || lineNo > maxLine) {
+					maxLine = lineNo;
+				}
+			}
+			if (minLine !== undefined && maxLine !== undefined) {
+				ranges.push({ start: minLine - 1, end: maxLine - 1 });
+			}
+		}
+		return ranges;
+	}
+
 	async banPart(partId: string): Promise<void> {
 		await this.syncCheckedFromExternalParts();
 		if (this.banned.has(partId)) {
