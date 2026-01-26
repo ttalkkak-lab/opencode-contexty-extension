@@ -325,6 +325,36 @@ export class MirrorState {
 		await this.syncCheckedFromExternalParts();
 	}
 
+	async banPartsUnderPath(baseUri: vscode.Uri): Promise<void> {
+		await this.syncCheckedFromExternalParts();
+		const basePath = baseUri.fsPath;
+		const baseLower = basePath.toLowerCase();
+		let changed = false;
+
+		for (const [key, parts] of this.partsByFile.entries()) {
+			try {
+				const fileUri = vscode.Uri.parse(key);
+				const filePath = fileUri.fsPath;
+				const filePathLower = filePath.toLowerCase();
+				if (filePathLower === baseLower || filePathLower.startsWith(baseLower + path.sep)) {
+					for (const part of parts) {
+						if (!this.banned.has(part.id)) {
+							this.banned.add(part.id);
+							changed = true;
+						}
+					}
+				}
+			} catch {
+				continue;
+			}
+		}
+
+		if (changed) {
+			await this.writeCheckedFile();
+			await this.syncCheckedFromExternalParts();
+		}
+	}
+
 	async refreshFromDisk(): Promise<void> {
 		await this.syncCheckedFromExternalParts();
 	}

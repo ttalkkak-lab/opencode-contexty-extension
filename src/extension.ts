@@ -60,13 +60,10 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand(
 			'kciMirror.removeFileContext',
 			async (node: MirrorNode | undefined) => {
-				if (!node || node.type !== 'file') {
+				if (!node || (node.type !== 'file' && node.type !== 'dir')) {
 					return;
 				}
-				const partIds = state.getPartIdsForFile(node.uri);
-				for (const partId of partIds) {
-					await state.banPart(partId);
-				}
+				await state.banPartsUnderPath(node.uri);
 				provider.refresh();
 				highlights.refreshAll();
 			}
