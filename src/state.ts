@@ -251,10 +251,10 @@ export class MirrorState {
 		}
 		const dirEntries = [...dirs.entries()]
 			.map(([dirPath, label]) => ({ uri: vscode.Uri.file(dirPath), label }))
-			.sort((a, b) => a.label.localeCompare(b.label));
+			.sort((a, b) => (a.label || "").localeCompare(b.label || ""));
 		const fileEntries = [...files.entries()]
 			.map(([filePath, label]) => ({ uri: vscode.Uri.file(filePath), label }))
-			.sort((a, b) => a.label.localeCompare(b.label));
+			.sort((a, b) => (a.label || "").localeCompare(b.label || ""));
 		return { dirs: dirEntries, files: fileEntries };
 	}
 
@@ -272,7 +272,7 @@ export class MirrorState {
 			if (aTime !== bTime) {
 				return aTime - bTime;
 			}
-			return a.id.localeCompare(b.id);
+			return (a.id || "").localeCompare(b.id || "");
 		});
 		return sorted.map((part) => {
 			const { label, tooltip } = summarizeToolPart(part);
@@ -467,7 +467,7 @@ export class MirrorState {
 		}
 
 		const banned = [...this.banned];
-		banned.sort((a, b) => a.localeCompare(b));
+		banned.sort((a, b) => (a || "").localeCompare(b || ""));
 
 		for (const { rootFsPathLower, contextDirUri, partsUri, banUri } of this.roots) {
 			try {
@@ -478,9 +478,12 @@ export class MirrorState {
 			let existingParts: ToolPart[] = [];
 			try {
 				const raw = await vscode.workspace.fs.readFile(partsUri);
-				const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as { parts?: ToolPart[] };
+				const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as { parts?: unknown[] };
 				if (Array.isArray(parsed.parts)) {
-					existingParts = parsed.parts;
+					existingParts = parsed.parts.filter((p: any): p is ToolPart =>
+						typeof p?.id === 'string' &&
+						typeof p?.state?.input?.filePath === 'string'
+					);
 				}
 			} catch {
 				// ignore
@@ -530,7 +533,7 @@ export class MirrorState {
 				partsMap.set(id, part);
 			}
 			const mergedParts = [...partsMap.values()];
-			mergedParts.sort((a, b) => a.state.input.filePath.localeCompare(b.state.input.filePath));
+			mergedParts.sort((a, b) => (a.state.input?.filePath || "").localeCompare(b.state.input?.filePath || ""));
 
 			const partsContents = Buffer.from(JSON.stringify({ parts: mergedParts }, null, 2), 'utf8');
 			try {
