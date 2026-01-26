@@ -12,6 +12,21 @@ export function activate(context: vscode.ExtensionContext) {
 	const selectionLens = new SelectionLensProvider();
 	const highlights = new MirrorContextHighlights(state);
 
+	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+	statusBarItem.command = 'kciMirror.addSelectionToContextWithCurrent';
+	statusBarItem.text = '$(plus) Add to Context';
+	statusBarItem.tooltip = 'Add current selection to context';
+	context.subscriptions.push(statusBarItem);
+
+	const updateStatusBar = () => {
+		const editor = vscode.window.activeTextEditor;
+		if (editor && !editor.selection.isEmpty) {
+			statusBarItem.show();
+		} else {
+			statusBarItem.hide();
+		}
+	};
+
 	const treeView = vscode.window.createTreeView('kciMirror.explorer', {
 		treeDataProvider: provider,
 		showCollapseAll: true
@@ -25,12 +40,14 @@ export function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 			selectionLens.updateSelection(event.textEditor.document.uri, event.selections[0]);
+			updateStatusBar();
 		})
 	);
 
 	context.subscriptions.push(
 		vscode.window.onDidChangeActiveTextEditor(() => {
 			highlights.refreshAll();
+			updateStatusBar();
 		}),
 		vscode.window.onDidChangeVisibleTextEditors(() => {
 			highlights.refreshAll();
@@ -38,6 +55,12 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('kciMirror.refresh', () => {
 			provider.refresh();
 			highlights.refreshAll();
+		}),
+		vscode.commands.registerCommand('kciMirror.addSelectionToContextWithCurrent', async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (editor && !editor.selection.isEmpty) {
+				await vscode.commands.executeCommand('kciMirror.addSelectionToContext', editor.document.uri, editor.selection);
+			}
 		}),
 		vscode.commands.registerCommand(
 			'kciMirror.addSelectionToContext',

@@ -24,7 +24,13 @@
       },
       {
         "command": "kciMirror.addSelectionToContext",
-        "title": "Add Selection to Context"
+        "title": "Add to Context",
+        "icon": "$(plus)"
+      },
+      {
+        "command": "kciMirror.addSelectionToContextWithCurrent",
+        "title": "Add Current Selection to Context",
+        "icon": "$(plus)"
       },
       {
         "command": "kciMirror.removePart",
@@ -63,6 +69,20 @@
           "command": "kciMirror.removeFileContext",
           "when": "view == kciMirror.explorer && (viewItem == kciMirror.file || viewItem == kciMirror.dir)",
           "group": "inline"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "kciMirror.addSelectionToContext",
+          "when": "editorHasSelection",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "kciMirror.addSelectionToContext",
+          "when": "editorHasSelection",
+          "group": "navigation"
         }
       ]
     },
