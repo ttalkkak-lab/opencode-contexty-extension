@@ -108,6 +108,12 @@
         "key": "ctrl+shift+a",
         "mac": "cmd+shift+a",
         "when": "explorerViewletFocus && !inputFocus"
+      },
+      {
+        "command": "kciMirror.addFileToContext",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "editorFocus"
       }
     ]
   },
