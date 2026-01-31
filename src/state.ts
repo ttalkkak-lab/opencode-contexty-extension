@@ -359,6 +359,65 @@ export class MirrorState {
 		await this.syncCheckedFromExternalParts();
 	}
 
+	async addFilePart(uri: vscode.Uri): Promise<void> {
+		if (uri.scheme !== 'file') {
+			return;
+		}
+
+		await this.syncCheckedFromExternalParts();
+
+		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+		const root = this.roots.find((entry) => entry.rootUri.toString() === workspaceFolder?.uri.toString());
+		if (!root) {
+			return;
+		}
+
+		const { output, preview, lineCount } = await formatFileWithNumbers(uri);
+		if (lineCount === 0) {
+			return;
+		}
+
+		const timestamp = Date.now();
+		const title = path.relative(root.rootUri.fsPath, uri.fsPath) || uri.fsPath;
+		const part: ToolPart = {
+			id: generateCustomId('prt'),
+			sessionID: this.sessionId,
+			messageID: generateCustomId('msg'),
+			type: 'tool',
+			callID: generateCustomId('call'),
+			tool: 'read',
+			state: {
+				status: 'completed',
+				input: { filePath: uri.fsPath },
+				output,
+				title,
+				metadata: { preview, truncated: false },
+				time: { start: timestamp, end: timestamp }
+			}
+		};
+
+		let existingParts: ToolPart[] = [];
+		try {
+			const raw = await vscode.workspace.fs.readFile(root.partsUri);
+			const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as { parts?: ToolPart[] };
+			if (Array.isArray(parsed.parts)) {
+				existingParts = parsed.parts;
+			}
+		} catch {
+			// ignore
+		}
+		existingParts.push(part);
+		const partsContents = Buffer.from(JSON.stringify({ parts: existingParts }, null, 2), 'utf8');
+		try {
+			await vscode.workspace.fs.createDirectory(root.contextDirUri);
+		} catch {
+			// ignore
+		}
+		await vscode.workspace.fs.writeFile(root.partsUri, partsContents);
+
+		await this.syncCheckedFromExternalParts();
+	}
+
 	async addSelectionPart(
 		document: vscode.TextDocument,
 		selection: vscode.Selection

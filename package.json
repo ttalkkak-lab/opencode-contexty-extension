@@ -41,6 +41,11 @@
         "command": "kciMirror.removeFileContext",
         "title": "Remove from Context",
         "icon": "$(close)"
+      },
+      {
+        "command": "kciMirror.addFileToContext",
+        "title": "Add to Context",
+        "icon": "$(plus)"
       }
     ],
     "views": {
@@ -84,12 +89,27 @@
           "when": "editorHasSelection",
           "group": "navigation"
         }
+      ],
+      "explorer/context": [
+        {
+          "command": "kciMirror.addFileToContext",
+          "when": "explorerResourceIsFolder || resourceScheme == file",
+          "group": "navigation"
+        }
       ]
     },
     "configuration": {
       "title": "KCI Mirror",
       "properties": {}
-    }
+    },
+    "keybindings": [
+      {
+        "command": "kciMirror.addFileToContext",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "explorerViewletFocus && !inputFocus"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

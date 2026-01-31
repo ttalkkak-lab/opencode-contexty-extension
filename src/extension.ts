@@ -90,6 +90,58 @@ export function activate(context: vscode.ExtensionContext) {
 				provider.refresh();
 				highlights.refreshAll();
 			}
+		),
+		vscode.commands.registerCommand(
+			'kciMirror.addFileToContext',
+			async (...args: unknown[]) => {
+				let targets: vscode.Uri[] = [];
+
+				if (args.length >= 2 && Array.isArray(args[1])) {
+					targets = args[1] as vscode.Uri[];
+				} else if (args.length >= 1 && args[0] instanceof vscode.Uri) {
+					targets = [args[0]];
+				}
+
+				if (targets.length === 0) {
+					const editor = vscode.window.activeTextEditor;
+					if (editor && editor.document.uri.scheme === 'file') {
+						targets.push(editor.document.uri);
+					}
+				}
+
+				if (targets.length === 0) {
+					return;
+				}
+
+				for (const target of targets) {
+					if (target.scheme !== 'file') {
+						continue;
+					}
+					try {
+						const stat = await vscode.workspace.fs.stat(target);
+						if (stat.type === vscode.FileType.File) {
+							await state.addFilePart(target);
+						} else if (stat.type === vscode.FileType.Directory) {
+							const files = await vscode.workspace.findFiles(
+								new vscode.RelativePattern(target, '**/*'),
+								'**/node_modules/**'
+							);
+							for (const file of files) {
+								try {
+									const fileStat = await vscode.workspace.fs.stat(file);
+									if (fileStat.type === vscode.FileType.File) {
+										await state.addFilePart(file);
+									}
+								} catch {
+								}
+							}
+						}
+					} catch {
+					}
+				}
+				provider.refresh();
+				highlights.refreshAll();
+			}
 		)
 	);
 
