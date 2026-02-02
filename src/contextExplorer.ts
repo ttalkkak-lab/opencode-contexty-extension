@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import { MirrorState } from './state';
+import { ContextState } from './state';
 
-export type MirrorNodeType = 'root' | 'dir' | 'file' | 'part';
+export type ContextNodeType = 'root' | 'dir' | 'file' | 'part';
 
-export type MirrorNode = {
-	type: MirrorNodeType;
+export type ContextNode = {
+	type: ContextNodeType;
 	uri: vscode.Uri;
 	label: string;
 	partId?: string;
@@ -12,13 +12,13 @@ export type MirrorNode = {
 	partTruncated?: boolean;
 };
 
-export class MirrorDragAndDropController implements vscode.TreeDragAndDropController<MirrorNode> {
-	dropMimeTypes = ['application/vnd.code.tree.kciMirror.explorer', 'text/uri-list'];
+export class ContextDragAndDropController implements vscode.TreeDragAndDropController<ContextNode> {
+	dropMimeTypes = ['application/vnd.code.tree.contexty.hscmm.explorer', 'text/uri-list'];
 	dragMimeTypes = [];
 
-	constructor(private readonly state: MirrorState, private readonly provider: MirrorExplorerProvider) { }
+	constructor(private readonly state: ContextState, private readonly provider: ContextExplorerProvider) { }
 
-	async handleDrop(target: MirrorNode | undefined, dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
+	async handleDrop(target: ContextNode | undefined, dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
 		const uriList = dataTransfer.get('text/uri-list');
 		if (!uriList) {
 			return;
@@ -77,18 +77,18 @@ export class MirrorDragAndDropController implements vscode.TreeDragAndDropContro
 		this.provider.refresh();
 	}
 
-	handleDrag(source: MirrorNode[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): void {
+	handleDrag(source: ContextNode[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): void {
 	}
 }
 
-export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNode> {
-	private readonly treeChangeEmitter = new vscode.EventEmitter<MirrorNode | undefined | null | void>();
+export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextNode> {
+	private readonly treeChangeEmitter = new vscode.EventEmitter<ContextNode | undefined | null | void>();
 	readonly onDidChangeTreeData = this.treeChangeEmitter.event;
 
 	private refreshTimer: NodeJS.Timeout | undefined;
 
 	constructor(
-		private readonly state: MirrorState,
+		private readonly state: ContextState,
 		private readonly disposables: vscode.Disposable[]
 	) {
 		const watcher = vscode.workspace.createFileSystemWatcher('**/*');
@@ -111,7 +111,7 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 		this.refreshTimer = setTimeout(() => this.refresh(), 150);
 	}
 
-	getTreeItem(node: MirrorNode): vscode.TreeItem {
+	getTreeItem(node: ContextNode): vscode.TreeItem {
 		const partCount = node.type === 'file' ? this.state.getPartCountForFile(node.uri) : 0;
 
 		const collapsibleState =
@@ -132,11 +132,11 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 		const item = new vscode.TreeItem(itemLabel, collapsibleState);
 		item.resourceUri = node.uri;
 		if (node.type === 'root') {
-			item.contextValue = 'kciMirror.root';
+			item.contextValue = 'contexty.hscmm.root';
 		} else if (node.type === 'part') {
-			item.contextValue = 'kciMirror.part';
+			item.contextValue = 'contexty.hscmm.part';
 		} else {
-			item.contextValue = node.type === 'file' ? 'kciMirror.file' : 'kciMirror.dir';
+			item.contextValue = node.type === 'file' ? 'contexty.hscmm.file' : 'contexty.hscmm.dir';
 		}
 
 		if (node.type === 'file') {
@@ -168,7 +168,7 @@ export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNod
 		return item;
 	}
 
-	async getChildren(node?: MirrorNode): Promise<MirrorNode[]> {
+	async getChildren(node?: ContextNode): Promise<ContextNode[]> {
 		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 			return [];
 		}

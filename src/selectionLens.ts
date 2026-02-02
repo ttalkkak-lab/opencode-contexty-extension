@@ -32,7 +32,7 @@ export class SelectionLensProvider implements vscode.CodeLensProvider {
 		}
 		const range = new vscode.Range(selection.start.line, 0, selection.start.line, 0);
 		const command: vscode.Command = {
-			command: 'kciMirror.addSelectionToContext',
+			command: 'contexty.hscmm.addSelectionToContext',
 			title: '$(plus) Add to Context',
 			arguments: [document.uri, selection]
 		};

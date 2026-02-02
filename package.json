@@ -1,8 +1,8 @@
 {
-  "name": "kci-mirror",
-  "displayName": "Korea Click Institute",
-  "description": "Korea Click Institute",
-  "publisher": "kci",
+  "name": "contexty-hscmm",
+  "displayName": "Contexty (HSCMM)",
+  "description": "HSCMM feature for Contexty",
+  "publisher": "contexty",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.80.0"
@@ -12,38 +12,38 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onView:kciMirror.explorer"
+    "onView:contexty.hscmm.explorer"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "kciMirror.refresh",
+        "command": "contexty.hscmm.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
       },
       {
-        "command": "kciMirror.addSelectionToContext",
+        "command": "contexty.hscmm.addSelectionToContext",
         "title": "Add to Context",
         "icon": "$(plus)"
       },
       {
-        "command": "kciMirror.addSelectionToContextWithCurrent",
+        "command": "contexty.hscmm.addSelectionToContextWithCurrent",
         "title": "Add Current Selection to Context",
         "icon": "$(plus)"
       },
       {
-        "command": "kciMirror.removePart",
+        "command": "contexty.hscmm.removePart",
         "title": "Remove from Context",
         "icon": "$(close)"
       },
       {
-        "command": "kciMirror.removeFileContext",
+        "command": "contexty.hscmm.removeFileContext",
         "title": "Remove from Context",
         "icon": "$(close)"
       },
       {
-        "command": "kciMirror.addFileToContext",
+        "command": "contexty.hscmm.addFileToContext",
         "title": "Add to Context",
         "icon": "$(plus)"
       }
@@ -51,8 +51,8 @@
     "views": {
       "explorer": [
         {
-          "id": "kciMirror.explorer",
-          "name": "Mirror Explorer",
+          "id": "contexty.hscmm.explorer",
+          "name": "Context Explorer",
           "dragAndDropController": true
         }
       ]
@@ -60,47 +60,47 @@
     "menus": {
       "view/title": [
         {
-          "command": "kciMirror.refresh",
-          "when": "view == kciMirror.explorer",
+          "command": "contexty.hscmm.refresh",
+          "when": "view == contexty.hscmm.explorer",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "kciMirror.removePart",
-          "when": "view == kciMirror.explorer && viewItem == kciMirror.part",
+          "command": "contexty.hscmm.removePart",
+          "when": "view == contexty.hscmm.explorer && viewItem == contexty.hscmm.part",
           "group": "inline"
         },
         {
-          "command": "kciMirror.removeFileContext",
-          "when": "view == kciMirror.explorer && (viewItem == kciMirror.file || viewItem == kciMirror.dir)",
+          "command": "contexty.hscmm.removeFileContext",
+          "when": "view == contexty.hscmm.explorer && (viewItem == contexty.hscmm.file || viewItem == contexty.hscmm.dir)",
           "group": "inline"
         }
       ],
       "editor/context": [
         {
-          "command": "kciMirror.addSelectionToContext",
+          "command": "contexty.hscmm.addSelectionToContext",
           "when": "editorHasSelection",
           "group": "navigation"
         }
       ],
       "editor/title": [
         {
-          "command": "kciMirror.addSelectionToContext",
+          "command": "contexty.hscmm.addSelectionToContext",
           "when": "editorHasSelection",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
-          "command": "kciMirror.addFileToContext",
+          "command": "contexty.hscmm.addFileToContext",
           "when": "explorerResourceIsFolder || resourceScheme == file",
           "group": "navigation"
         }
       ]
     },
     "configuration": {
-      "title": "KCI Mirror",
+      "title": "Contexty HSCMM",
       "properties": {}
     }
   },

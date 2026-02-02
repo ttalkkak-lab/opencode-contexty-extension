@@ -10,7 +10,7 @@
       "state": {
         "status": "completed",
         "input": {
-          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\package.json"
+          "filePath": "C:\\딸깍 extension\\Contexty\\Contexty (HSCMM)\\package.json"
         }
       }
     },
@@ -24,7 +24,7 @@
       "state": {
         "status": "completed",
         "input": {
-          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\README.md"
+          "filePath": "C:\\딸깍 extension\\Contexty\\Contexty (HSCMM)\\README.md"
         }
       }
     },
@@ -38,7 +38,7 @@
       "state": {
         "status": "completed",
         "input": {
-          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\src\\extension.ts"
+          "filePath": "C:\\딸깍 extension\\Contexty\\Contexty (HSCMM)\\src\\extension.ts"
         }
       }
     },
@@ -52,21 +52,21 @@
       "state": {
         "status": "completed",
         "input": {
-          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\src\\state.ts"
+          "filePath": "C:\\딸깍 extension\\Contexty\\Contexty (HSCMM)\\src\\state.ts"
         }
       }
     },
     {
-      "id": "prt_mirrorExplorer0",
+      "id": "prt_contextExplorer0",
       "sessionID": "ses_analysis_20250124",
-      "messageID": "msg_mirrorExplorer0",
+      "messageID": "msg_contextExplorer0",
       "type": "tool",
-      "callID": "call_mirrorExplorer0",
+      "callID": "call_contextExplorer0",
       "tool": "read",
       "state": {
         "status": "completed",
         "input": {
-          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\src\\mirrorExplorer.ts"
+          "filePath": "C:\\딸깍 extension\\Contexty\\Contexty (HSCMM)\\src\\contextExplorer.ts"
         }
       }
     },
@@ -80,7 +80,7 @@
       "state": {
         "status": "completed",
         "input": {
-          "filePath": "C:\\딸깍 extension\\KoreaClickInstitute\\src\\decorations.ts"
+          "filePath": "C:\\딸깍 extension\\Contexty\\Contexty (HSCMM)\\src\\decorations.ts"
         }
       }
     }

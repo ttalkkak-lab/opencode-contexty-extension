@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import { MirrorState } from './state';
+import { ContextState } from './state';
 
-export class MirrorContextHighlights implements vscode.Disposable {
+export class ContextHighlights implements vscode.Disposable {
 	private readonly decoration: vscode.TextEditorDecorationType;
 
-	constructor(private readonly state: MirrorState) {
+	constructor(private readonly state: ContextState) {
 		this.decoration = vscode.window.createTextEditorDecorationType({
 			isWholeLine: true,
 			backgroundColor: 'rgba(120, 190, 255, 0.18)'

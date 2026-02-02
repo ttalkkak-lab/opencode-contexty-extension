@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
-import { MirrorState } from './state';
+import { ContextState } from './state';
 
-export class MirrorDecorations implements vscode.FileDecorationProvider {
+export class ContextDecorations implements vscode.FileDecorationProvider {
 	private readonly emitter = new vscode.EventEmitter<vscode.Uri | vscode.Uri[] | undefined>();
 	readonly onDidChangeFileDecorations = this.emitter.event;
 
-	constructor(private readonly state: MirrorState) {}
+	constructor(private readonly state: ContextState) {}
 
 	refresh(uris?: vscode.Uri | vscode.Uri[]): void {
 		this.emitter.fire(uris);
@@ -15,7 +15,7 @@ export class MirrorDecorations implements vscode.FileDecorationProvider {
 		if (this.state.isChecked(uri)) {
 			return {
 				badge: '✓',
-				tooltip: 'Checked (KCI Mirror)',
+				tooltip: 'Checked (Contexty)',
 				color: new vscode.ThemeColor('problemsInfoIcon.foreground')
 			};
 		}

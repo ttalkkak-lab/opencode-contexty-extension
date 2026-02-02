@@ -36,8 +36,8 @@ type StoredStateV4 = {
 	banned: string[];
 };
 
-const STATE_KEY = 'kciMirror.state';
-const SESSION_KEY = 'kciMirror.sessionId';
+const STATE_KEY = 'contexty.hscmm.state';
+const SESSION_KEY = 'contexty.hscmm.sessionId';
 
 function asKey(uri: vscode.Uri): string {
 	// Use full URI string so multi-root workspaces stay unique.
@@ -133,7 +133,7 @@ async function formatFileWithNumbers(uri: vscode.Uri): Promise<{
 	}
 }
 
-export class MirrorState {
+export class ContextState {
 	// Key: full URI string (uri.toString()), Value: stable generated id.
 	private checked = new Map<string, string>();
 	private banned = new Set<string>();

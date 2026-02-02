@@ -1,19 +1,19 @@
 import * as vscode from 'vscode';
 
-import { MirrorExplorerProvider, MirrorNode, MirrorDragAndDropController } from './mirrorExplorer';
-import { MirrorState } from './state';
+import { ContextExplorerProvider, ContextNode, ContextDragAndDropController } from './contextExplorer';
+import { ContextState } from './state';
 import { SelectionLensProvider } from './selectionLens';
-import { MirrorContextHighlights } from './contextHighlights';
+import { ContextHighlights } from './contextHighlights';
 
 export function activate(context: vscode.ExtensionContext) {
 	const workspaceFolders = vscode.workspace.workspaceFolders;
-	const state = new MirrorState(context.workspaceState, workspaceFolders);
-	const provider = new MirrorExplorerProvider(state, context.subscriptions);
+	const state = new ContextState(context.workspaceState, workspaceFolders);
+	const provider = new ContextExplorerProvider(state, context.subscriptions);
 	const selectionLens = new SelectionLensProvider();
-	const highlights = new MirrorContextHighlights(state);
+	const highlights = new ContextHighlights(state);
 
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-	statusBarItem.command = 'kciMirror.addSelectionToContextWithCurrent';
+	statusBarItem.command = 'contexty.hscmm.addSelectionToContextWithCurrent';
 	statusBarItem.text = '$(plus) Add to Context';
 	statusBarItem.tooltip = 'Add current selection to context';
 	context.subscriptions.push(statusBarItem);
@@ -27,10 +27,10 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	};
 
-	const treeView = vscode.window.createTreeView('kciMirror.explorer', {
+	const treeView = vscode.window.createTreeView('contexty.hscmm.explorer', {
 		treeDataProvider: provider,
 		showCollapseAll: true,
-		dragAndDropController: new MirrorDragAndDropController(state, provider)
+		dragAndDropController: new ContextDragAndDropController(state, provider)
 	});
 	context.subscriptions.push(treeView, highlights);
 
@@ -53,18 +53,18 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.onDidChangeVisibleTextEditors(() => {
 			highlights.refreshAll();
 		}),
-		vscode.commands.registerCommand('kciMirror.refresh', () => {
+		vscode.commands.registerCommand('contexty.hscmm.refresh', () => {
 			provider.refresh();
 			highlights.refreshAll();
 		}),
-		vscode.commands.registerCommand('kciMirror.addSelectionToContextWithCurrent', async () => {
+		vscode.commands.registerCommand('contexty.hscmm.addSelectionToContextWithCurrent', async () => {
 			const editor = vscode.window.activeTextEditor;
 			if (editor && !editor.selection.isEmpty) {
-				await vscode.commands.executeCommand('kciMirror.addSelectionToContext', editor.document.uri, editor.selection);
+				await vscode.commands.executeCommand('contexty.hscmm.addSelectionToContext', editor.document.uri, editor.selection);
 			}
 		}),
 		vscode.commands.registerCommand(
-			'kciMirror.addSelectionToContext',
+			'contexty.hscmm.addSelectionToContext',
 			async (uri: vscode.Uri, selection: vscode.Selection) => {
 				const doc = await vscode.workspace.openTextDocument(uri);
 				await state.addSelectionPart(doc, selection);
@@ -73,7 +73,7 @@ export function activate(context: vscode.ExtensionContext) {
 				highlights.refreshAll();
 			}
 		),
-		vscode.commands.registerCommand('kciMirror.removePart', async (node: MirrorNode | undefined) => {
+		vscode.commands.registerCommand('contexty.hscmm.removePart', async (node: ContextNode | undefined) => {
 			if (!node || node.type !== 'part' || !node.partId) {
 				return;
 			}
@@ -82,8 +82,8 @@ export function activate(context: vscode.ExtensionContext) {
 			highlights.refreshAll();
 		}),
 		vscode.commands.registerCommand(
-			'kciMirror.removeFileContext',
-			async (node: MirrorNode | undefined) => {
+			'contexty.hscmm.removeFileContext',
+			async (node: ContextNode | undefined) => {
 				if (!node || (node.type !== 'file' && node.type !== 'dir')) {
 					return;
 				}
@@ -93,7 +93,7 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		),
 		vscode.commands.registerCommand(
-			'kciMirror.addFileToContext',
+			'contexty.hscmm.addFileToContext',
 			async (...args: unknown[]) => {
 				let targets: vscode.Uri[] = [];
 
@@ -152,5 +152,4 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
