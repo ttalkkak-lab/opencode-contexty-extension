@@ -1,125 +1,125 @@
 {
-  "name": "contexty-hscmm",
-  "displayName": "Contexty (HSCMM)",
-  "description": "HSCMM feature for Contexty",
-  "publisher": "contexty",
-  "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.80.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [
-    "onStartupFinished",
-    "onView:contexty.hscmm.explorer"
-  ],
-  "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "contexty.hscmm.refresh",
-        "title": "Refresh",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "contexty.hscmm.addSelectionToContext",
-        "title": "Add to Context",
-        "icon": "$(plus)"
-      },
-      {
-        "command": "contexty.hscmm.addSelectionToContextWithCurrent",
-        "title": "Add Current Selection to Context",
-        "icon": "$(plus)"
-      },
-      {
-        "command": "contexty.hscmm.removePart",
-        "title": "Remove from Context",
-        "icon": "$(close)"
-      },
-      {
-        "command": "contexty.hscmm.removeFileContext",
-        "title": "Remove from Context",
-        "icon": "$(close)"
-      },
-      {
-        "command": "contexty.hscmm.addFileToContext",
-        "title": "Add to Context",
-        "icon": "$(plus)"
-      }
-    ],
-    "views": {
-      "explorer": [
-        {
-          "id": "contexty.hscmm.explorer",
-          "name": "Context Explorer",
-          "dragAndDropController": true
-        }
-      ]
-    },
-    "menus": {
-      "view/title": [
-        {
-          "command": "contexty.hscmm.refresh",
-          "when": "view == contexty.hscmm.explorer",
-          "group": "navigation"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "contexty.hscmm.removePart",
-          "when": "view == contexty.hscmm.explorer && viewItem == contexty.hscmm.part",
-          "group": "inline"
-        },
-        {
-          "command": "contexty.hscmm.removeFileContext",
-          "when": "view == contexty.hscmm.explorer && (viewItem == contexty.hscmm.file || viewItem == contexty.hscmm.dir)",
-          "group": "inline"
-        }
-      ],
-      "editor/context": [
-        {
-          "command": "contexty.hscmm.addSelectionToContext",
-          "when": "editorHasSelection",
-          "group": "navigation"
-        }
-      ],
-      "editor/title": [
-        {
-          "command": "contexty.hscmm.addSelectionToContext",
-          "when": "editorHasSelection",
-          "group": "navigation"
-        }
-      ],
-      "explorer/context": [
-        {
-          "command": "contexty.hscmm.addFileToContext",
-          "when": "explorerResourceIsFolder || resourceScheme == file",
-          "group": "navigation"
-        }
-      ]
-    },
-    "configuration": {
-      "title": "Contexty HSCMM",
-      "properties": {}
-    }
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.108.1",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "22.x",
-    "typescript-eslint": "^8.52.0",
-    "eslint": "^9.39.2",
-    "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
-  }
+	"name": "contexty-hscmm",
+	"displayName": "Contexty (HSCMM)",
+	"description": "HSCMM feature for Contexty",
+	"publisher": "ttalkkak-lab",
+	"version": "0.0.1",
+	"engines": {
+		"vscode": "^1.80.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onStartupFinished",
+		"onView:contexty.hscmm.explorer"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "contexty.hscmm.refresh",
+				"title": "Refresh",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "contexty.hscmm.addSelectionToContext",
+				"title": "Add to Context",
+				"icon": "$(plus)"
+			},
+			{
+				"command": "contexty.hscmm.addSelectionToContextWithCurrent",
+				"title": "Add Current Selection to Context",
+				"icon": "$(plus)"
+			},
+			{
+				"command": "contexty.hscmm.removePart",
+				"title": "Remove from Context",
+				"icon": "$(close)"
+			},
+			{
+				"command": "contexty.hscmm.removeFileContext",
+				"title": "Remove from Context",
+				"icon": "$(close)"
+			},
+			{
+				"command": "contexty.hscmm.addFileToContext",
+				"title": "Add to Context",
+				"icon": "$(plus)"
+			}
+		],
+		"views": {
+			"explorer": [
+				{
+					"id": "contexty.hscmm.explorer",
+					"name": "Context Explorer",
+					"dragAndDropController": true
+				}
+			]
+		},
+		"menus": {
+			"view/title": [
+				{
+					"command": "contexty.hscmm.refresh",
+					"when": "view == contexty.hscmm.explorer",
+					"group": "navigation"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "contexty.hscmm.removePart",
+					"when": "view == contexty.hscmm.explorer && viewItem == contexty.hscmm.part",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.hscmm.removeFileContext",
+					"when": "view == contexty.hscmm.explorer && (viewItem == contexty.hscmm.file || viewItem == contexty.hscmm.dir)",
+					"group": "inline"
+				}
+			],
+			"editor/context": [
+				{
+					"command": "contexty.hscmm.addSelectionToContext",
+					"when": "editorHasSelection",
+					"group": "navigation"
+				}
+			],
+			"editor/title": [
+				{
+					"command": "contexty.hscmm.addSelectionToContext",
+					"when": "editorHasSelection",
+					"group": "navigation"
+				}
+			],
+			"explorer/context": [
+				{
+					"command": "contexty.hscmm.addFileToContext",
+					"when": "explorerResourceIsFolder || resourceScheme == file",
+					"group": "navigation"
+				}
+			]
+		},
+		"configuration": {
+			"title": "Contexty HSCMM",
+			"properties": {}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"pretest": "npm run compile && npm run lint",
+		"lint": "eslint src",
+		"test": "vscode-test"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.108.1",
+		"@types/mocha": "^10.0.10",
+		"@types/node": "22.x",
+		"typescript-eslint": "^8.52.0",
+		"eslint": "^9.39.2",
+		"typescript": "^5.9.3",
+		"@vscode/test-cli": "^0.0.12",
+		"@vscode/test-electron": "^2.5.2"
+	}
 }

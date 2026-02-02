@@ -20,32 +20,14 @@ type ToolPart = {
 	metadata?: Record<string, unknown>;
 };
 
-type StoredStateV2 = {
-	version: 2;
-	checked: string[];
-};
-
-type StoredStateV3 = {
-	version: 3;
-	checked: Array<{ uri: string; id: string }>;
-};
-
-type StoredStateV4 = {
-	version: 4;
-	checked: Array<{ uri: string; id: string }>;
-	banned: string[];
-};
-
 const STATE_KEY = 'contexty.hscmm.state';
 const SESSION_KEY = 'contexty.hscmm.sessionId';
 
 function asKey(uri: vscode.Uri): string {
-	// Use full URI string so multi-root workspaces stay unique.
 	return uri.toString();
 }
 
 function generateCustomId(prefix: string): string {
-	// Keep lexicographic ordering roughly aligned with creation time.
 	const timestampHex = Date.now().toString(16).padStart(12, '0');
 	const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 	let randomPart = '';
@@ -53,11 +35,6 @@ function generateCustomId(prefix: string): string {
 		randomPart += alphabet[crypto.randomInt(0, alphabet.length)];
 	}
 	return `${prefix}_${timestampHex}${randomPart}`;
-}
-
-function generateOpenAIItemId(): string {
-	// Match shape: fc_ + 50 hex chars (25 bytes)
-	return `fc_${crypto.randomBytes(25).toString('hex')}`;
 }
 
 function summarizeToolPart(part: ToolPart): { label: string; tooltip: string } {
@@ -134,7 +111,6 @@ async function formatFileWithNumbers(uri: vscode.Uri): Promise<{
 }
 
 export class ContextState {
-	// Key: full URI string (uri.toString()), Value: stable generated id.
 	private checked = new Map<string, string>();
 	private banned = new Set<string>();
 	private partsByFile = new Map<string, ToolPart[]>();
@@ -152,7 +128,6 @@ export class ContextState {
 		workspaceFolders?: readonly vscode.WorkspaceFolder[]
 	) {
 		this.sessionId = this.loadOrCreateSessionId();
-		// Persist checked files at each workspace root.
 		this.roots = (workspaceFolders ?? [])
 			.filter((wf) => wf.uri.scheme === 'file')
 			.map((wf) => {
@@ -167,7 +142,6 @@ export class ContextState {
 				};
 			});
 		this.load();
-		// Best-effort: keep the JSON file in sync on startup.
 		void this.writeCheckedFile();
 		void this.refreshFromDisk();
 	}
@@ -502,56 +476,16 @@ export class ContextState {
 		await this.syncCheckedFromExternalParts();
 	}
 
-	async toggleChecked(uri: vscode.Uri): Promise<void> {
-		await this.setChecked(uri, !this.isChecked(uri));
-	}
-
-	async setChecked(uri: vscode.Uri, checked: boolean): Promise<void> {
-		await this.setCheckedMany([{ uri, checked }]);
-	}
-
-	async setCheckedMany(updates: Array<{ uri: vscode.Uri; checked: boolean }>): Promise<void> {
-		// 먼저 JSON에서 현재 상태를 로드
-		await this.syncCheckedFromExternalParts();
-
-		let changed = false;
-		for (const { uri, checked } of updates) {
-			const key = asKey(uri);
-			if (checked) {
-				const newId = generateCustomId('prt');
-				this.checked.set(key, newId);
-				changed = true;
-			} else {
-				const parts = this.partsByFile.get(key) ?? [];
-				for (const part of parts) {
-					if (!this.banned.has(part.id)) {
-						this.banned.add(part.id);
-						changed = true;
-					}
-				}
-			}
-		}
-
-		if (!changed) {
-			return;
-		}
-
-		await this.writeCheckedFile();
-		await this.syncCheckedFromExternalParts();
-	}
-
 	private async writeCheckedFile(): Promise<void> {
 		if (this.roots.length === 0) {
 			return;
 		}
 
-		// Pre-parse checked URIs once.
 		const checkedEntries: Array<{ uri: vscode.Uri; id: string }> = [];
 		for (const [key, id] of this.checked.entries()) {
 			try {
 				checkedEntries.push({ uri: vscode.Uri.parse(key), id });
 			} catch {
-				// Ignore invalid entries.
 			}
 		}
 
@@ -562,7 +496,6 @@ export class ContextState {
 			try {
 				await vscode.workspace.fs.createDirectory(contextDirUri);
 			} catch {
-				// best-effort; ignore
 			}
 			let existingParts: ToolPart[] = [];
 			try {
@@ -575,11 +508,9 @@ export class ContextState {
 					);
 				}
 			} catch {
-				// ignore
 			}
 			const partsMap = new Map(existingParts.map((p) => [p.id, p] as const));
 
-			const parts: ToolPart[] = [...existingParts];
 			for (const { uri, id } of checkedEntries) {
 				if (uri.scheme !== 'file') {
 					continue;
@@ -602,7 +533,6 @@ export class ContextState {
 				const { output, preview, truncated } = await formatFileWithNumbers(uri);
 				const messageId = generateCustomId('msg');
 				const callId = generateCustomId('call');
-				const itemId = generateOpenAIItemId();
 				const part: ToolPart = {
 					id,
 					sessionID: this.sessionId,
@@ -628,29 +558,23 @@ export class ContextState {
 			try {
 				await vscode.workspace.fs.writeFile(partsUri, partsContents);
 			} catch {
-				// Ignore file sync errors; workspaceState is still the source of truth.
 			}
 
 			const banContents = Buffer.from(JSON.stringify({ ids: banned }, null, 2), 'utf8');
 			try {
 				await vscode.workspace.fs.writeFile(banUri, banContents);
 			} catch {
-				// Ignore file sync errors; workspaceState is still the source of truth.
 			}
 		}
 	}
 
 	private load(): void {
-		// JSON 파일에서 직접 읽음 (memento 무시)
 		this.checked = new Map();
 		this.banned = new Set();
 		this.partsByFile = new Map();
 	}
 
-
-
 	private async syncCheckedFromExternalParts(): Promise<void> {
-		// JSON 파일에서 checked와 banned를 새로 로드 (memento 무시)
 		this.checked = new Map();
 		this.banned = new Set();
 		this.partsByFile = new Map();
@@ -672,7 +596,6 @@ export class ContextState {
 					}
 				}
 			} catch {
-				// 파일 없거나 파싱 실패시 무시
 			}
 
 			let raw: Uint8Array;

@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
-  <mask id="logo" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" mask-type="alpha">
-    <image href="../src/logo.png" x="0" y="0" width="128" height="128" preserveAspectRatio="xMidYMid meet" />
-  </mask>
-  <rect x="0" y="0" width="128" height="128" fill="currentColor" mask="url(#logo)" />
-</svg>
