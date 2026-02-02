@@ -102,21 +102,7 @@
     "configuration": {
       "title": "KCI Mirror",
       "properties": {}
-    },
-    "keybindings": [
-      {
-        "command": "kciMirror.addFileToContext",
-        "key": "ctrl+shift+a",
-        "mac": "cmd+shift+a",
-        "when": "explorerViewletFocus && !inputFocus"
-      },
-      {
-        "command": "kciMirror.addFileToContext",
-        "key": "ctrl+shift+a",
-        "mac": "cmd+shift+a",
-        "when": "editorFocus"
-      }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
