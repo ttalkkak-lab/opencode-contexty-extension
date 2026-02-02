@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { MirrorExplorerProvider, MirrorNode } from './mirrorExplorer';
+import { MirrorExplorerProvider, MirrorNode, MirrorDragAndDropController } from './mirrorExplorer';
 import { MirrorState } from './state';
 import { SelectionLensProvider } from './selectionLens';
 import { MirrorContextHighlights } from './contextHighlights';
@@ -29,7 +29,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const treeView = vscode.window.createTreeView('kciMirror.explorer', {
 		treeDataProvider: provider,
-		showCollapseAll: true
+		showCollapseAll: true,
+		dragAndDropController: new MirrorDragAndDropController(state, provider)
 	});
 	context.subscriptions.push(treeView, highlights);
 

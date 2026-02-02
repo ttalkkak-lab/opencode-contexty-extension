@@ -12,6 +12,75 @@ export type MirrorNode = {
 	partTruncated?: boolean;
 };
 
+export class MirrorDragAndDropController implements vscode.TreeDragAndDropController<MirrorNode> {
+	dropMimeTypes = ['application/vnd.code.tree.kciMirror.explorer', 'text/uri-list'];
+	dragMimeTypes = [];
+
+	constructor(private readonly state: MirrorState, private readonly provider: MirrorExplorerProvider) { }
+
+	async handleDrop(target: MirrorNode | undefined, dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
+		const uriList = dataTransfer.get('text/uri-list');
+		if (!uriList) {
+			return;
+		}
+
+		const uris: vscode.Uri[] = [];
+		const entries = await uriList.value;
+		if (typeof entries === 'string') {
+			const lines = entries.split(/\r?\n/).filter(line => line.trim().length > 0);
+			for (const line of lines) {
+				try {
+					uris.push(vscode.Uri.parse(line));
+				} catch { }
+			}
+		}
+
+		if (uris.length === 0) {
+			return;
+		}
+
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: "Adding to Context...",
+			cancellable: false
+		}, async () => {
+			for (const uri of uris) {
+				if (token.isCancellationRequested) {
+					break;
+				}
+				if (uri.scheme !== 'file') {
+					continue;
+				}
+
+				try {
+					const stat = await vscode.workspace.fs.stat(uri);
+					if (stat.type === vscode.FileType.File) {
+						await this.state.addFilePart(uri);
+					} else if (stat.type === vscode.FileType.Directory) {
+						const files = await vscode.workspace.findFiles(
+							new vscode.RelativePattern(uri, '**/*'),
+							'**/node_modules/**'
+						);
+						for (const file of files) {
+							try {
+								const fileStat = await vscode.workspace.fs.stat(file);
+								if (fileStat.type === vscode.FileType.File) {
+									await this.state.addFilePart(file);
+								}
+							} catch { }
+						}
+					}
+				} catch { }
+			}
+		});
+
+		this.provider.refresh();
+	}
+
+	handleDrag(source: MirrorNode[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): void {
+	}
+}
+
 export class MirrorExplorerProvider implements vscode.TreeDataProvider<MirrorNode> {
 	private readonly treeChangeEmitter = new vscode.EventEmitter<MirrorNode | undefined | null | void>();
 	readonly onDidChangeTreeData = this.treeChangeEmitter.event;
