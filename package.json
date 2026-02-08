@@ -3,6 +3,7 @@
   "displayName": "Contexty (HSCMM)",
   "description": "HSCMM feature for Contexty",
   "publisher": "ttalkkak-lab",
+  "readme": "./README.md",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.108.0"
