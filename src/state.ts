@@ -142,6 +142,7 @@ export class ContextState {
 				};
 			});
 		this.load();
+		void this.ensureGitignoreForRoots();
 		void this.writeCheckedFile();
 		void this.refreshFromDisk();
 	}
@@ -230,6 +231,43 @@ export class ContextState {
 			.map(([filePath, label]) => ({ uri: vscode.Uri.file(filePath), label }))
 			.sort((a, b) => (a.label || "").localeCompare(b.label || ""));
 		return { dirs: dirEntries, files: fileEntries };
+	}
+
+	private async ensureGitignoreForRoots(): Promise<void> {
+		await Promise.all(
+			this.roots.map(async ({ rootUri }) => {
+				const gitignoreUri = vscode.Uri.joinPath(rootUri, '.gitignore');
+				try {
+					const buf = await vscode.workspace.fs.readFile(gitignoreUri);
+					const text = Buffer.from(buf).toString('utf8');
+					if (this.gitignoreHasContexty(text)) {
+						return;
+					}
+					const newline = text.endsWith('\n') || text.length === 0 ? '' : '\n';
+					const updated = `${text}${newline}.contexty\n`;
+					await vscode.workspace.fs.writeFile(gitignoreUri, Buffer.from(updated, 'utf8'));
+				} catch {
+					const content = '.contexty\n';
+					await vscode.workspace.fs.writeFile(gitignoreUri, Buffer.from(content, 'utf8'));
+				}
+			})
+		);
+	}
+
+	private gitignoreHasContexty(text: string): boolean {
+		const lines = text.split(/\r?\n/);
+		return lines.some((line) => {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith('#')) {
+				return false;
+			}
+			return (
+				trimmed === '.contexty' ||
+				trimmed === '.contexty/' ||
+				trimmed === '/.contexty' ||
+				trimmed === '/.contexty/'
+			);
+		});
 	}
 
 	getPartsForFile(
