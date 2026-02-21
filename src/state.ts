@@ -367,6 +367,27 @@ export class ContextState {
 		}
 	}
 
+	async banAllParts(): Promise<number> {
+		await this.syncCheckedFromExternalParts();
+
+		let added = 0;
+		for (const parts of this.partsByFile.values()) {
+			for (const part of parts) {
+				if (!this.banned.has(part.id)) {
+					this.banned.add(part.id);
+					added += 1;
+				}
+			}
+		}
+
+		if (added > 0) {
+			await this.writeCheckedFile();
+			await this.syncCheckedFromExternalParts();
+		}
+
+		return added;
+	}
+
 	async refreshFromDisk(): Promise<void> {
 		await this.syncCheckedFromExternalParts();
 	}

@@ -51,6 +51,11 @@
 				"command": "contexty.hscmm.addFileToContext",
 				"title": "Add to Context",
 				"icon": "$(plus)"
+			},
+			{
+				"command": "contexty.hscmm.resetContext",
+				"title": "Reset Context",
+				"icon": "$(clear-all)"
 			}
 		],
 		"views": {
@@ -68,6 +73,11 @@
 					"command": "contexty.hscmm.refresh",
 					"when": "view == contexty.hscmm.explorer",
 					"group": "navigation"
+				},
+				{
+					"command": "contexty.hscmm.resetContext",
+					"when": "view == contexty.hscmm.explorer",
+					"group": "navigation@2"
 				}
 			],
 			"view/item/context": [

@@ -92,6 +92,16 @@ export function activate(context: vscode.ExtensionContext) {
 				highlights.refreshAll();
 			}
 		),
+		vscode.commands.registerCommand('contexty.hscmm.resetContext', async () => {
+			const added = await state.banAllParts();
+			provider.refresh();
+			highlights.refreshAll();
+			vscode.window.showInformationMessage(
+				added > 0
+					? `Context reset complete: ${added} part(s) added to blacklist.`
+					: 'Context reset complete: no active parts to blacklist.'
+			);
+		}),
 		vscode.commands.registerCommand(
 			'contexty.hscmm.addFileToContext',
 			async (...args: unknown[]) => {
