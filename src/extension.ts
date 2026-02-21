@@ -93,6 +93,19 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		),
 		vscode.commands.registerCommand('contexty.hscmm.resetContext', async () => {
+			const confirmLabel = 'Reset';
+			const decision = await vscode.window.showWarningMessage(
+				'Reset all context parts?',
+				{
+					modal: true,
+					detail: 'All accumulated context parts will be added to blacklist.'
+				},
+				confirmLabel
+			);
+			if (decision !== confirmLabel) {
+				return;
+			}
+
 			const added = await state.banAllParts();
 			provider.refresh();
 			highlights.refreshAll();
