@@ -1,9 +1,83 @@
 import * as vscode from 'vscode';
+import { mkdir, readFile, writeFile } from 'fs/promises';
+import * as path from 'path';
 
 import { ContextExplorerProvider, ContextNode, ContextDragAndDropController } from './contextExplorer';
 import { ContextState } from './state';
 import { SelectionLensProvider } from './selectionLens';
 import { ContextHighlights } from './contextHighlights';
+import type { FolderAccess, PermissionsFile, Preset, ToolCategory, ToolPermission } from './acpmNodes';
+
+type ACPMPermissionsFile = PermissionsFile & { activePreset?: string };
+
+const TOOL_CATEGORIES: ToolCategory[] = ['file-read', 'file-write', 'shell', 'web', 'lsp', 'mcp'];
+
+function getWorkspaceRootUri(): vscode.Uri | undefined {
+	return vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === 'file')?.uri;
+}
+
+function getPermissionsFileUri(): vscode.Uri | undefined {
+	const workspaceRoot = getWorkspaceRootUri();
+	return workspaceRoot ? vscode.Uri.joinPath(workspaceRoot, '.contexty', 'permissions.json') : undefined;
+}
+
+async function readPermissionsFile(): Promise<ACPMPermissionsFile> {
+	const fileUri = getPermissionsFileUri();
+	if (!fileUri) {
+		return { version: 1, presets: [] };
+	}
+
+	try {
+		const raw = await readFile(fileUri.fsPath, 'utf8');
+		const parsed = JSON.parse(raw) as ACPMPermissionsFile;
+		return {
+			version: typeof parsed.version === 'number' ? parsed.version : 1,
+			presets: Array.isArray(parsed.presets) ? parsed.presets : [],
+			activePreset: typeof parsed.activePreset === 'string' ? parsed.activePreset : undefined
+		};
+	} catch {
+		return { version: 1, presets: [] };
+	}
+}
+
+async function writePermissionsFile(data: ACPMPermissionsFile): Promise<void> {
+	const fileUri = getPermissionsFileUri();
+	if (!fileUri) {
+		return;
+	}
+
+	await mkdir(path.dirname(fileUri.fsPath), { recursive: true });
+	await writeFile(fileUri.fsPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+}
+
+async function refreshAcpmView(provider: ContextExplorerProvider, highlights: ContextHighlights): Promise<void> {
+	provider.refresh();
+	highlights.refreshAll();
+}
+
+async function pickPreset(file: ACPMPermissionsFile, title: string): Promise<Preset | undefined> {
+	if (file.presets.length === 0) {
+		vscode.window.showInformationMessage('No ACPM presets are configured.');
+		return undefined;
+	}
+
+	const items = file.presets.map((preset) => ({ label: preset.name, description: preset.description ?? '' }));
+	const selected = await vscode.window.showQuickPick(
+		items,
+		{ title, placeHolder: 'Select a preset' }
+	);
+	return selected ? file.presets.find((preset) => preset.name === selected.label) : undefined;
+}
+
+function clonePreset(preset: Preset): Preset {
+	return {
+		name: preset.name,
+		description: preset.description,
+		folderPermissions: [...preset.folderPermissions],
+		toolPermissions: [...preset.toolPermissions],
+		defaultPolicy: preset.defaultPolicy
+	};
+}
 
 export function activate(context: vscode.ExtensionContext) {
 	const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -56,6 +130,173 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('contexty.hscmm.refresh', () => {
 			provider.refresh();
 			highlights.refreshAll();
+		}),
+		vscode.commands.registerCommand('contexty.acpm.createPreset', async () => {
+			const name = await vscode.window.showInputBox({
+				title: 'Create ACPM Preset',
+				prompt: 'Enter a preset name',
+				validateInput: (value) => (value.trim().length === 0 ? 'Preset name is required.' : undefined)
+			});
+			if (!name) {
+				return;
+			}
+
+			const file = await readPermissionsFile();
+			if (file.presets.some((preset) => preset.name === name.trim())) {
+				vscode.window.showWarningMessage(`Preset "${name.trim()}" already exists.`);
+				return;
+			}
+
+			const description = await vscode.window.showInputBox({
+				title: 'Create ACPM Preset',
+				prompt: 'Optional description'
+			});
+
+			file.presets.push({
+				name: name.trim(),
+				description: description?.trim() || undefined,
+				folderPermissions: [],
+				toolPermissions: [],
+				defaultPolicy: 'allow-all'
+			});
+			await writePermissionsFile(file);
+			await refreshAcpmView(provider, highlights);
+		}),
+		vscode.commands.registerCommand('contexty.acpm.deletePreset', async (node?: ContextNode) => {
+			const file = await readPermissionsFile();
+			const initialPreset = node && 'preset' in node ? node.preset : undefined;
+			const preset = initialPreset ?? (await pickPreset(file, 'Delete ACPM Preset'));
+			if (!preset) {
+				return;
+			}
+
+			const decision = await vscode.window.showWarningMessage(
+				`Delete preset "${preset.name}"?`,
+				{ modal: true },
+				'Delete'
+			);
+			if (decision !== 'Delete') {
+				return;
+			}
+
+			file.presets = file.presets.filter((item) => item.name !== preset.name);
+			if (file.activePreset === preset.name) {
+				delete file.activePreset;
+			}
+			await writePermissionsFile(file);
+			await refreshAcpmView(provider, highlights);
+		}),
+		vscode.commands.registerCommand('contexty.acpm.switchPreset', async (node?: ContextNode) => {
+			const file = await readPermissionsFile();
+			const preset = node && 'preset' in node ? node.preset : await pickPreset(file, 'Switch ACPM Preset');
+			if (!preset) {
+				return;
+			}
+
+			file.activePreset = preset.name;
+			await writePermissionsFile(file);
+			await refreshAcpmView(provider, highlights);
+			vscode.window.showInformationMessage(`Active preset set to "${preset.name}".`);
+		}),
+		vscode.commands.registerCommand('contexty.acpm.addFolderPermission', async (node?: ContextNode) => {
+			const file = await readPermissionsFile();
+			const preset = node && 'preset' in node ? node.preset : await pickPreset(file, 'Add Folder Permission');
+			if (!preset) {
+				return;
+			}
+
+			const folderPath = await vscode.window.showInputBox({
+				title: 'Add Folder Permission',
+				prompt: 'Enter a folder path',
+				validateInput: (value) => (value.trim().length === 0 ? 'Folder path is required.' : undefined)
+			});
+			if (!folderPath) {
+				return;
+			}
+
+			const access = await vscode.window.showQuickPick(
+				['denied', 'read-only', 'read-write'],
+				{
+					title: 'Add Folder Permission',
+					placeHolder: 'Select access level'
+				}
+			);
+			if (!access) {
+				return;
+			}
+
+			const target = file.presets.find((item) => item.name === preset.name);
+			if (!target) {
+				return;
+			}
+
+			const nextPreset = clonePreset(target);
+			nextPreset.folderPermissions = nextPreset.folderPermissions.filter((permission) => permission.path !== folderPath.trim());
+			nextPreset.folderPermissions.push({ path: folderPath.trim(), access: access as FolderAccess });
+			file.presets = file.presets.map((item) => (item.name === nextPreset.name ? nextPreset : item));
+			await writePermissionsFile(file);
+			await refreshAcpmView(provider, highlights);
+		}),
+		vscode.commands.registerCommand('contexty.acpm.removeFolderPermission', async (node?: ContextNode) => {
+			const file = await readPermissionsFile();
+			const preset = node && 'preset' in node ? node.preset : await pickPreset(file, 'Remove Folder Permission');
+			if (!preset) {
+				return;
+			}
+
+			const target = file.presets.find((item) => item.name === preset.name);
+			if (!target || target.folderPermissions.length === 0) {
+				vscode.window.showInformationMessage('No folder permissions to remove.');
+				return;
+			}
+
+			const selected = await vscode.window.showQuickPick(
+				target.folderPermissions.map((permission) => ({ label: permission.path, description: permission.access })),
+				{ title: 'Remove Folder Permission', placeHolder: 'Select a folder rule' }
+			);
+			if (!selected) {
+				return;
+			}
+
+			const nextPreset = clonePreset(target);
+			nextPreset.folderPermissions = nextPreset.folderPermissions.filter((permission) => permission.path !== selected.label);
+			file.presets = file.presets.map((item) => (item.name === nextPreset.name ? nextPreset : item));
+			await writePermissionsFile(file);
+			await refreshAcpmView(provider, highlights);
+		}),
+		vscode.commands.registerCommand('contexty.acpm.toggleTool', async (node?: ContextNode) => {
+			const file = await readPermissionsFile();
+			const preset = node && 'preset' in node ? node.preset : await pickPreset(file, 'Toggle Tool Category');
+			if (!preset) {
+				return;
+			}
+
+			const category = await vscode.window.showQuickPick(
+				TOOL_CATEGORIES,
+				{
+					title: 'Toggle Tool Category',
+					placeHolder: 'Select a tool category'
+				}
+			);
+			if (!category) {
+				return;
+			}
+
+			const target = file.presets.find((item) => item.name === preset.name);
+			if (!target) {
+				return;
+			}
+
+			const nextPreset = clonePreset(target);
+			const existing = nextPreset.toolPermissions.find((permission) => permission.category === category);
+			if (existing) {
+				existing.enabled = !existing.enabled;
+			} else {
+				nextPreset.toolPermissions.push({ category: category as ToolCategory, enabled: false } satisfies ToolPermission);
+			}
+			file.presets = file.presets.map((item) => (item.name === nextPreset.name ? nextPreset : item));
+			await writePermissionsFile(file);
+			await refreshAcpmView(provider, highlights);
 		}),
 		vscode.commands.registerCommand('contexty.hscmm.addSelectionToContextWithCurrent', async () => {
 			const editor = vscode.window.activeTextEditor;

@@ -56,6 +56,36 @@
 				"command": "contexty.hscmm.resetContext",
 				"title": "Reset Context",
 				"icon": "$(clear-all)"
+			},
+			{
+				"command": "contexty.acpm.createPreset",
+				"title": "Create ACPM Preset",
+				"icon": "$(add)"
+			},
+			{
+				"command": "contexty.acpm.deletePreset",
+				"title": "Delete ACPM Preset",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "contexty.acpm.switchPreset",
+				"title": "Switch ACPM Preset",
+				"icon": "$(arrow-switch)"
+			},
+			{
+				"command": "contexty.acpm.addFolderPermission",
+				"title": "Add Folder Permission",
+				"icon": "$(folder-add)"
+			},
+			{
+				"command": "contexty.acpm.removeFolderPermission",
+				"title": "Remove Folder Permission",
+				"icon": "$(folder-library)"
+			},
+			{
+				"command": "contexty.acpm.toggleTool",
+				"title": "Toggle Tool Category",
+				"icon": "$(tools)"
 			}
 		],
 		"views": {
@@ -90,6 +120,36 @@
 					"command": "contexty.hscmm.removeFileContext",
 					"when": "view == contexty.hscmm.explorer && (viewItem == contexty.hscmm.file || viewItem == contexty.hscmm.dir)",
 					"group": "inline"
+				},
+				{
+					"command": "contexty.acpm.createPreset",
+					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.root",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.acpm.switchPreset",
+					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.preset",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.acpm.deletePreset",
+					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.preset",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.acpm.addFolderPermission",
+					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.preset",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.acpm.removeFolderPermission",
+					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.folder-perm",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.acpm.toggleTool",
+					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.preset",
+					"group": "navigation"
 				}
 			],
 			"editor/context": [
