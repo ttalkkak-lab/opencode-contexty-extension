@@ -198,6 +198,23 @@ export function activate(context: vscode.ExtensionContext) {
 			refreshAcpmView(acpmProvider);
 		}),
 		vscode.commands.registerCommand('contexty.acpm.removeFolderPermission', async (node?: ACPMNode) => {
+			if (node?.type === 'acpm-folder-perm' && node.folderPermission && node.parentPresetName) {
+				const file = await readPermissionsFile();
+				const target = file.presets.find((preset) => preset.name === node.parentPresetName);
+				if (!target) {
+					return;
+				}
+
+				const nextPreset = clonePreset(target);
+				nextPreset.folderPermissions = nextPreset.folderPermissions.filter(
+					(permission) => !(permission.path === node.folderPermission!.path && permission.access === node.folderPermission!.access)
+				);
+				file.presets = file.presets.map((item) => (item.name === nextPreset.name ? nextPreset : item));
+				await writePermissionsFile(file);
+				refreshAcpmView(acpmProvider);
+				return;
+			}
+
 			const file = await readPermissionsFile();
 			const preset = node && node.type === 'acpm-preset' ? node.preset : await pickPreset(file, 'Remove Folder Permission');
 			if (!preset) {
@@ -220,6 +237,35 @@ export function activate(context: vscode.ExtensionContext) {
 
 			const nextPreset = clonePreset(target);
 			nextPreset.folderPermissions = nextPreset.folderPermissions.filter((permission) => permission.path !== selected.label);
+			file.presets = file.presets.map((item) => (item.name === nextPreset.name ? nextPreset : item));
+			await writePermissionsFile(file);
+			refreshAcpmView(acpmProvider);
+		}),
+		vscode.commands.registerCommand('contexty.acpm.changeFolderAccess', async (node?: ACPMNode) => {
+			if (!node || node.type !== 'acpm-folder-perm' || !node.folderPermission || !node.parentPresetName) {
+				return;
+			}
+
+			const currentAccess = node.folderPermission.access;
+			const next = await vscode.window.showQuickPick(
+				(['denied', 'read-only', 'read-write'] as const).filter((access) => access !== currentAccess),
+				{ title: 'Change Access Level', placeHolder: `Current: ${currentAccess}` }
+			);
+			if (!next) {
+				return;
+			}
+			const nextAccess = next as FolderAccess;
+
+			const file = await readPermissionsFile();
+			const target = file.presets.find((preset) => preset.name === node.parentPresetName);
+			if (!target) {
+				return;
+			}
+
+			const nextPreset = clonePreset(target);
+			nextPreset.folderPermissions = nextPreset.folderPermissions.map((permission) =>
+				permission.path === node.folderPermission!.path ? { ...permission, access: nextAccess } : permission
+			);
 			file.presets = file.presets.map((item) => (item.name === nextPreset.name ? nextPreset : item));
 			await writePermissionsFile(file);
 			refreshAcpmView(acpmProvider);

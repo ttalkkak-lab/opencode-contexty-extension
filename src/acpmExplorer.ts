@@ -9,7 +9,8 @@ import {
 	type ACPMNode,
 	type FolderAccess,
 	type PermissionsFile,
-	type Preset
+	type Preset,
+	type ToolCategory
 } from './acpmNodes';
 
 function getWorkspaceRootUri(): vscode.Uri | undefined {
@@ -21,6 +22,27 @@ export function getPermissionsFileUri(): vscode.Uri | undefined {
 	return workspaceRoot ? vscode.Uri.joinPath(workspaceRoot, '.contexty', 'permissions.json') : undefined;
 }
 
+const DEFAULT_PRESET_NAME = 'Default';
+const ALL_TOOL_CATEGORIES: ToolCategory[] = ['file-read', 'file-write', 'shell', 'web', 'lsp', 'mcp'];
+
+function createDefaultPreset(workspaceRoot: vscode.Uri): Preset {
+	return {
+		name: DEFAULT_PRESET_NAME,
+		description: 'Default preset — all tools allowed, project root read-write',
+		folderPermissions: [{ path: '.', access: 'read-write' }],
+		toolPermissions: ALL_TOOL_CATEGORIES.map((category) => ({ category, enabled: true })),
+		defaultPolicy: 'allow-all'
+	};
+}
+
+function createDefaultPermissionsFile(workspaceRoot: vscode.Uri): PermissionsFile {
+	return {
+		version: 1,
+		presets: [createDefaultPreset(workspaceRoot)],
+		activePreset: DEFAULT_PRESET_NAME
+	};
+}
+
 export async function readPermissionsFile(): Promise<PermissionsFile> {
 	const fileUri = getPermissionsFileUri();
 	if (!fileUri) {
@@ -29,9 +51,22 @@ export async function readPermissionsFile(): Promise<PermissionsFile> {
 
 	try {
 		const raw = await readFile(fileUri.fsPath, 'utf8');
-		return parsePermissionsFile(JSON.parse(raw));
+		const parsed = parsePermissionsFile(JSON.parse(raw));
+		if (parsed.presets.length === 0) {
+			const workspaceRoot = getWorkspaceRootUri();
+			const defaults = workspaceRoot ? createDefaultPermissionsFile(workspaceRoot) : { version: 1, presets: [] };
+			await writePermissionsFile(defaults);
+			return defaults;
+		}
+		return parsed;
 	} catch {
-		return { version: 1, presets: [] };
+		const workspaceRoot = getWorkspaceRootUri();
+		if (!workspaceRoot) {
+			return { version: 1, presets: [] };
+		}
+		const defaults = createDefaultPermissionsFile(workspaceRoot);
+		await writePermissionsFile(defaults);
+		return defaults;
 	}
 }
 

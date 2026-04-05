@@ -89,6 +89,11 @@
 				"icon": "$(folder-library)"
 			},
 			{
+				"command": "contexty.acpm.changeFolderAccess",
+				"title": "Change Access Level",
+				"icon": "$(edit)"
+			},
+			{
 				"command": "contexty.acpm.toggleTool",
 				"title": "Toggle Tool Category",
 				"icon": "$(tools)"
@@ -159,6 +164,11 @@
 				},
 				{
 					"command": "contexty.acpm.removeFolderPermission",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.folder-perm",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.acpm.changeFolderAccess",
 					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.folder-perm",
 					"group": "inline"
 				},

@@ -38,6 +38,7 @@ export type ACPMNode = {
 	preset?: Preset;
 	folderPermission?: FolderPermission;
 	toolPermission?: ToolPermission;
+	parentPresetName?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -57,7 +58,7 @@ function formatPresetLabel(preset: Preset, activePreset?: string): string {
 }
 
 function formatFolderPermissionLabel(folderPermission: FolderPermission): string {
-	return `${formatFolderPathLabel(folderPermission.path)} (${folderPermission.access})`;
+	return formatFolderPathLabel(folderPermission.path);
 }
 
 function formatToolPermissionLabel(toolPermission: ToolPermission): string {
@@ -137,25 +138,27 @@ export function getACPMChildren(node: ACPMNode): ACPMNode[] {
 	}
 
 	if (node.type === 'acpm-preset') {
-		if (!node.preset) {
+		const preset = node.preset;
+		if (!preset) {
 			return [];
 		}
 
 		return [
-			...node.preset.folderPermissions.map<ACPMNode>((folderPermission) => ({
+			...preset.folderPermissions.map<ACPMNode>((folderPermission) => ({
 				type: 'acpm-folder-perm',
 				uri: node.uri,
 				label: formatFolderPermissionLabel(folderPermission),
 				tooltip: `${folderPermission.access} • ${folderPermission.path}`,
-				description: folderPermission.access === 'denied' ? 'denied' : undefined,
-				folderPermission
+				folderPermission,
+				parentPresetName: preset.name
 			})),
-			...node.preset.toolPermissions.map<ACPMNode>((toolPermission) => ({
+			...preset.toolPermissions.map<ACPMNode>((toolPermission) => ({
 				type: 'acpm-tool-perm',
 				uri: node.uri,
 				label: formatToolPermissionLabel(toolPermission),
 				tooltip: `${toolPermission.enabled ? 'enabled' : 'disabled'} • ${toolPermission.category}`,
-				toolPermission
+				toolPermission,
+				parentPresetName: preset.name
 			}))
 		];
 	}
@@ -190,9 +193,12 @@ export function getACPMTreeItem(node: ACPMNode): vscode.TreeItem {
 	if (node.type === 'acpm-folder-perm') {
 		item.contextValue = 'contexty.acpm.folder-perm';
 		item.iconPath = new vscode.ThemeIcon(node.folderPermission?.access === 'read-write' ? 'folder-opened' : 'folder');
-		if (node.folderPermission?.access === 'denied') {
-			item.description = 'denied';
-		}
+		item.description = node.folderPermission?.access;
+		item.command = {
+			command: 'contexty.acpm.changeFolderAccess',
+			title: 'Change Access',
+			arguments: [node]
+		};
 		return item;
 	}
 
