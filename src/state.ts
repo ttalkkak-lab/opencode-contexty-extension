@@ -45,7 +45,9 @@ function summarizeToolPart(part: ToolPart): { label: string; tooltip: string } {
 	let preview = '';
 
 	for (const line of lines) {
-		const match = line.match(/^(\d+)\|\s?(.*)$/);
+		const oldFormat = line.match(/^(\d+)\|\s?(.*)$/);
+		const newFormat = line.match(/^(\d+):\s(.*)$/);
+		const match = oldFormat ?? newFormat;
 		if (match) {
 			const lineNo = Number.parseInt(match[1], 10);
 			if (!Number.isNaN(lineNo)) {
@@ -54,12 +56,13 @@ function summarizeToolPart(part: ToolPart): { label: string; tooltip: string } {
 				}
 				lastLine = lineNo;
 			}
-			if (!preview && match[2].trim()) {
-				preview = match[2].trim();
+			const content = oldFormat ? match[2] : match![2];
+			if (!preview && content.trim()) {
+				preview = content.trim();
 			}
 			continue;
 		}
-		if (!preview && line.trim()) {
+		if (!preview && line.trim() && !line.trim().startsWith('<') ) {
 			preview = line.trim();
 		}
 	}
@@ -304,8 +307,8 @@ export class ContextState {
 			const lines = output.split(/\r?\n/);
 			let minLine: number | undefined;
 			let maxLine: number | undefined;
-			for (const line of lines) {
-				const match = line.match(/^(\d+)\|\s?/);
+		for (const line of lines) {
+			const match = line.match(/^(\d+)(?:\||:\s)/);
 				if (!match) {
 					continue;
 				}
@@ -685,6 +688,10 @@ export class ContextState {
 				}
 				const id = typeof p.id === 'string' ? p.id : generateCustomId('prt');
 				if (localBlacklist.has(id) || this.banned.has(id)) {
+					continue;
+				}
+				const output = typeof state?.output === 'string' ? state.output : '';
+				if (output.includes('<type>directory</type>')) {
 					continue;
 				}
 				const uri = vscode.Uri.file(filePath);
