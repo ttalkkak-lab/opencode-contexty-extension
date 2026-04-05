@@ -17,13 +17,19 @@
 	],
 	"activationEvents": [
 		"onStartupFinished",
-		"onView:contexty.hscmm.explorer"
+		"onView:contexty.hscmm.explorer",
+		"onView:contexty.acpm.explorer"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"commands": [
 			{
 				"command": "contexty.hscmm.refresh",
+				"title": "Refresh",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "contexty.acpm.refresh",
 				"title": "Refresh",
 				"icon": "$(refresh)"
 			},
@@ -94,6 +100,11 @@
 					"id": "contexty.hscmm.explorer",
 					"name": "Context Explorer",
 					"dragAndDropController": true
+				},
+				{
+					"id": "contexty.acpm.explorer",
+					"name": "ACPM",
+					"dragAndDropController": true
 				}
 			]
 		},
@@ -108,6 +119,11 @@
 					"command": "contexty.hscmm.resetContext",
 					"when": "view == contexty.hscmm.explorer",
 					"group": "navigation@2"
+				},
+				{
+					"command": "contexty.acpm.refresh",
+					"when": "view == contexty.acpm.explorer",
+					"group": "navigation"
 				}
 			],
 			"view/item/context": [
@@ -123,32 +139,32 @@
 				},
 				{
 					"command": "contexty.acpm.createPreset",
-					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.root",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.root",
 					"group": "navigation"
 				},
 				{
 					"command": "contexty.acpm.switchPreset",
-					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.preset",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.preset",
 					"group": "navigation"
 				},
 				{
 					"command": "contexty.acpm.deletePreset",
-					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.preset",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.preset",
 					"group": "inline"
 				},
 				{
 					"command": "contexty.acpm.addFolderPermission",
-					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.preset",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.preset",
 					"group": "navigation"
 				},
 				{
 					"command": "contexty.acpm.removeFolderPermission",
-					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.folder-perm",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.folder-perm",
 					"group": "inline"
 				},
 				{
 					"command": "contexty.acpm.toggleTool",
-					"when": "view == contexty.hscmm.explorer && viewItem == contexty.acpm.preset",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.preset",
 					"group": "navigation"
 				}
 			],

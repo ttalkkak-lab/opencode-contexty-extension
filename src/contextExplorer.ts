@@ -1,13 +1,5 @@
 import * as vscode from 'vscode';
 import { ContextState } from './state';
-import {
-	getACPMChildren,
-	getACPMTreeItem,
-	isACPMNode,
-	parsePermissionsFile,
-	type ACPMNode,
-	type PermissionsFile
-} from './acpmNodes';
 
 export type ContextNodeType = 'root' | 'dir' | 'file' | 'part';
 
@@ -18,7 +10,7 @@ export type ContextNode = {
 	partId?: string;
 	tooltip?: string;
 	partTruncated?: boolean;
-} | ACPMNode;
+};
 
 export class ContextDragAndDropController implements vscode.TreeDragAndDropController<ContextNode> {
 	dropMimeTypes = ['application/vnd.code.tree.contexty.hscmm.explorer', 'text/uri-list'];
@@ -120,10 +112,6 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 	}
 
 	getTreeItem(node: ContextNode): vscode.TreeItem {
-		if (isACPMNode(node)) {
-			return getACPMTreeItem(node);
-		}
-
 		const partCount = node.type === 'file' ? this.state.getPartCountForFile(node.uri) : 0;
 
 		const collapsibleState =
@@ -185,40 +173,14 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 			return [];
 		}
 
-		if (node && isACPMNode(node)) {
-			return getACPMChildren(node);
-		}
-
 		if (!node) {
-			const permissionsFile = await this.readACPMPermissionsFile();
-			const workspaceRoot = vscode.workspace.workspaceFolders.find((folder) => folder.uri.scheme === 'file')?.uri;
-			const acpmRoot: ACPMNode | undefined = workspaceRoot
-				? {
-					type: 'acpm-root',
-					uri: workspaceRoot,
-					label: 'ACPM',
-					permissionsFile
-				}
-				: undefined;
-
 			await this.state.refreshFromDisk();
 			const roots = this.state.getRootsWithParts();
 			if (roots.length === 1) {
 				const children = this.state.getChildrenForPath(roots[0].uri);
 				return [
-					...(acpmRoot ? [acpmRoot] : []),
 					...children.dirs.map((dir) => ({ type: 'dir' as const, uri: dir.uri, label: dir.label })),
 					...children.files.map((file) => ({ type: 'file' as const, uri: file.uri, label: file.label }))
-				];
-			}
-			if (acpmRoot) {
-				return [
-					acpmRoot,
-					...roots.map((root) => ({
-						type: 'root' as const,
-						uri: root.uri,
-						label: root.label
-					}))
 				];
 			}
 			return roots.map((root) => ({
@@ -245,21 +207,5 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 			...children.dirs.map((dir) => ({ type: 'dir' as const, uri: dir.uri, label: dir.label })),
 			...children.files.map((file) => ({ type: 'file' as const, uri: file.uri, label: file.label }))
 		];
-	}
-
-	private async readACPMPermissionsFile(): Promise<PermissionsFile> {
-		const workspaceRoot = vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === 'file')?.uri;
-		if (!workspaceRoot) {
-			return { version: 1, presets: [] };
-		}
-
-		try {
-			const fileUri = vscode.Uri.joinPath(workspaceRoot, '.contexty', 'permissions.json');
-			const raw = await vscode.workspace.fs.readFile(fileUri);
-			const parsed = JSON.parse(Buffer.from(raw).toString('utf8'));
-			return parsePermissionsFile(parsed);
-		} catch {
-			return { version: 1, presets: [] };
-		}
 	}
 }

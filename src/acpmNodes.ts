@@ -24,6 +24,7 @@ export interface Preset {
 export interface PermissionsFile {
 	version: number;
 	presets: Preset[];
+	activePreset?: string;
 }
 
 export type ACPMNodeType = 'acpm-root' | 'acpm-preset' | 'acpm-folder-perm' | 'acpm-tool-perm';
@@ -39,14 +40,28 @@ export type ACPMNode = {
 	toolPermission?: ToolPermission;
 };
 
-const folderAccessPrefix: Record<FolderAccess, string> = {
-	denied: '🔴',
-	'read-only': '🟡',
-	'read-write': '🟢'
-};
-
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null;
+}
+
+function formatFolderPathLabel(folderPath: string): string {
+	const normalized = folderPath.replace(/\\/g, '/').trim();
+	if (normalized.length === 0) {
+		return '/';
+	}
+	return normalized.endsWith('/') ? normalized : `${normalized}/`;
+}
+
+function formatPresetLabel(preset: Preset, activePreset?: string): string {
+	return preset.name === activePreset ? `${preset.name} ★` : preset.name;
+}
+
+function formatFolderPermissionLabel(folderPermission: FolderPermission): string {
+	return `${formatFolderPathLabel(folderPermission.path)} (${folderPermission.access})`;
+}
+
+function formatToolPermissionLabel(toolPermission: ToolPermission): string {
+	return `${toolPermission.category} (${toolPermission.enabled ? 'enabled' : 'disabled'})`;
 }
 
 function isFolderPermission(value: unknown): value is FolderPermission {
@@ -79,8 +94,14 @@ function isPreset(value: unknown): value is Preset {
 }
 
 export function parsePermissionsFile(value: unknown): PermissionsFile {
-	if (isRecord(value) && typeof value.version === 'number' && Array.isArray(value.presets) && value.presets.every(isPreset)) {
-		return { version: value.version, presets: value.presets };
+	if (
+		isRecord(value) &&
+		typeof value.version === 'number' &&
+		Array.isArray(value.presets) &&
+		value.presets.every(isPreset) &&
+		(value.activePreset === undefined || typeof value.activePreset === 'string')
+	) {
+		return { version: value.version, presets: value.presets, activePreset: value.activePreset };
 	}
 
 	return { version: 1, presets: [] };
@@ -97,6 +118,7 @@ export function isACPMNode(node: { type: string }): node is ACPMNode {
 export function getACPMChildren(node: ACPMNode): ACPMNode[] {
 	if (node.type === 'acpm-root') {
 		const presets = node.permissionsFile?.presets ?? [];
+		const activePreset = node.permissionsFile?.activePreset;
 		if (presets.length === 0) {
 			return [{
 				type: 'acpm-preset',
@@ -108,7 +130,7 @@ export function getACPMChildren(node: ACPMNode): ACPMNode[] {
 		return presets.map<ACPMNode>((preset) => ({
 			type: 'acpm-preset',
 			uri: node.uri,
-			label: preset.name,
+			label: formatPresetLabel(preset, activePreset),
 			tooltip: preset.description,
 			preset
 		}));
@@ -123,14 +145,15 @@ export function getACPMChildren(node: ACPMNode): ACPMNode[] {
 			...node.preset.folderPermissions.map<ACPMNode>((folderPermission) => ({
 				type: 'acpm-folder-perm',
 				uri: node.uri,
-				label: `${folderAccessPrefix[folderPermission.access]} ${folderPermission.path}`,
+				label: formatFolderPermissionLabel(folderPermission),
 				tooltip: `${folderPermission.access} • ${folderPermission.path}`,
+				description: folderPermission.access === 'denied' ? 'denied' : undefined,
 				folderPermission
 			})),
 			...node.preset.toolPermissions.map<ACPMNode>((toolPermission) => ({
 				type: 'acpm-tool-perm',
 				uri: node.uri,
-				label: `${toolPermission.enabled ? '✅' : '⚫'} ${toolPermission.category}`,
+				label: formatToolPermissionLabel(toolPermission),
 				tooltip: `${toolPermission.enabled ? 'enabled' : 'disabled'} • ${toolPermission.category}`,
 				toolPermission
 			}))
@@ -160,17 +183,20 @@ export function getACPMTreeItem(node: ACPMNode): vscode.TreeItem {
 
 	if (node.type === 'acpm-preset') {
 		item.contextValue = 'contexty.acpm.preset';
-		item.iconPath = new vscode.ThemeIcon('settings');
+		item.iconPath = new vscode.ThemeIcon('settings-gear');
 		return item;
 	}
 
 	if (node.type === 'acpm-folder-perm') {
 		item.contextValue = 'contexty.acpm.folder-perm';
-		item.iconPath = new vscode.ThemeIcon('folder');
+		item.iconPath = new vscode.ThemeIcon(node.folderPermission?.access === 'read-write' ? 'folder-opened' : 'folder');
+		if (node.folderPermission?.access === 'denied') {
+			item.description = 'denied';
+		}
 		return item;
 	}
 
 	item.contextValue = 'contexty.acpm.tool-perm';
-	item.iconPath = new vscode.ThemeIcon('gear');
+	item.iconPath = new vscode.ThemeIcon(node.toolPermission?.enabled ? 'check' : 'x');
 	return item;
 }
