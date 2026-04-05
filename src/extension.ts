@@ -5,9 +5,7 @@ import { ContextState } from './state';
 import { SelectionLensProvider } from './selectionLens';
 import { ContextHighlights } from './contextHighlights';
 import { AcpmDragAndDropController, AcpmExplorerProvider, clonePreset, readPermissionsFile, writePermissionsFile } from './acpmExplorer';
-import type { ACPMNode, FolderAccess, PermissionsFile, Preset, ToolCategory, ToolPermission } from './acpmNodes';
-
-const TOOL_CATEGORIES: ToolCategory[] = ['file-read', 'file-write', 'shell', 'web', 'lsp', 'mcp'];
+import { ALL_TOOL_CATEGORIES, type ACPMNode, type FolderAccess, type PermissionsFile, type Preset, type ToolCategory, type ToolPermission } from './acpmNodes';
 
 function refreshAcpmView(provider: AcpmExplorerProvider): void {
 	provider.refresh();
@@ -116,7 +114,7 @@ export function activate(context: vscode.ExtensionContext) {
 				name: name.trim(),
 				description: description?.trim() || undefined,
 				folderPermissions: [],
-				toolPermissions: [],
+				toolPermissions: ALL_TOOL_CATEGORIES.map((category) => ({ category, enabled: true })),
 				defaultPolicy: 'allow-all'
 			});
 			await writePermissionsFile(file);
@@ -271,6 +269,26 @@ export function activate(context: vscode.ExtensionContext) {
 			refreshAcpmView(acpmProvider);
 		}),
 		vscode.commands.registerCommand('contexty.acpm.toggleTool', async (node?: ACPMNode) => {
+			if (node?.type === 'acpm-tool-perm' && node.toolPermission && node.parentPresetName) {
+				const file = await readPermissionsFile();
+				const target = file.presets.find((preset) => preset.name === node.parentPresetName);
+				if (!target) {
+					return;
+				}
+
+				const nextPreset = clonePreset(target);
+				const existing = nextPreset.toolPermissions.find((permission) => permission.category === node.toolPermission!.category);
+				if (existing) {
+					existing.enabled = !existing.enabled;
+				} else {
+					nextPreset.toolPermissions.push({ category: node.toolPermission.category, enabled: !node.toolPermission.enabled });
+				}
+				file.presets = file.presets.map((item) => (item.name === nextPreset.name ? nextPreset : item));
+				await writePermissionsFile(file);
+				refreshAcpmView(acpmProvider);
+				return;
+			}
+
 			const file = await readPermissionsFile();
 			const preset = node && node.type === 'acpm-preset' ? node.preset : await pickPreset(file, 'Toggle Tool Category');
 			if (!preset) {
@@ -278,7 +296,7 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 
 			const category = await vscode.window.showQuickPick(
-				TOOL_CATEGORIES,
+				ALL_TOOL_CATEGORIES,
 				{
 					title: 'Toggle Tool Category',
 					placeHolder: 'Select a tool category'

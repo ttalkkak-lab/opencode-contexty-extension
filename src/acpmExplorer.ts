@@ -3,14 +3,14 @@ import { mkdir, readFile, writeFile } from 'fs/promises';
 import * as vscode from 'vscode';
 
 import {
+	ALL_TOOL_CATEGORIES,
 	getACPMChildren,
 	getACPMTreeItem,
 	parsePermissionsFile,
 	type ACPMNode,
 	type FolderAccess,
 	type PermissionsFile,
-	type Preset,
-	type ToolCategory
+	type Preset
 } from './acpmNodes';
 
 function getWorkspaceRootUri(): vscode.Uri | undefined {
@@ -23,9 +23,8 @@ export function getPermissionsFileUri(): vscode.Uri | undefined {
 }
 
 const DEFAULT_PRESET_NAME = 'Default';
-const ALL_TOOL_CATEGORIES: ToolCategory[] = ['file-read', 'file-write', 'shell', 'web', 'lsp', 'mcp'];
 
-function createDefaultPreset(workspaceRoot: vscode.Uri): Preset {
+function createDefaultPreset(_workspaceRoot: vscode.Uri): Preset {
 	return {
 		name: DEFAULT_PRESET_NAME,
 		description: 'Default preset — all tools allowed, project root read-write',
@@ -163,7 +162,7 @@ export class AcpmExplorerProvider implements vscode.TreeDataProvider<ACPMNode> {
 			return [{ type: 'acpm-root', uri: workspaceRoot, label: 'ACPM', permissionsFile }];
 		}
 
-		if (node.type === 'acpm-root' || node.type === 'acpm-preset') {
+		if (node.type === 'acpm-root' || node.type === 'acpm-preset' || node.type === 'acpm-folder-perm') {
 			return getACPMChildren(node);
 		}
 

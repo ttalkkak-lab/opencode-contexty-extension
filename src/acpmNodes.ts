@@ -29,6 +29,8 @@ export interface PermissionsFile {
 
 export type ACPMNodeType = 'acpm-root' | 'acpm-preset' | 'acpm-folder-perm' | 'acpm-tool-perm';
 
+export const ALL_TOOL_CATEGORIES: ToolCategory[] = ['file-read', 'file-write', 'shell', 'web', 'lsp', 'mcp'];
+
 export type ACPMNode = {
 	type: ACPMNodeType;
 	uri: vscode.Uri;
@@ -47,10 +49,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function formatFolderPathLabel(folderPath: string): string {
 	const normalized = folderPath.replace(/\\/g, '/').trim();
-	if (normalized.length === 0) {
-		return '/';
-	}
-	return normalized.endsWith('/') ? normalized : `${normalized}/`;
+	return normalized.length === 0 ? '.' : normalized;
 }
 
 function formatPresetLabel(preset: Preset, activePreset?: string): string {
@@ -76,7 +75,7 @@ function isFolderPermission(value: unknown): value is FolderPermission {
 function isToolPermission(value: unknown): value is ToolPermission {
 	return (
 		isRecord(value) &&
-		(value.category === 'file-read' || value.category === 'file-write' || value.category === 'shell' || value.category === 'web' || value.category === 'lsp' || value.category === 'mcp') &&
+		ALL_TOOL_CATEGORIES.includes(value.category as ToolCategory) &&
 		typeof value.enabled === 'boolean'
 	);
 }
@@ -112,6 +111,35 @@ export function isACPMNodeType(value: string): value is ACPMNodeType {
 	return value === 'acpm-root' || value === 'acpm-preset' || value === 'acpm-folder-perm' || value === 'acpm-tool-perm';
 }
 
+function normalizeFolderPath(value: string): string {
+	return value.replace(/\\/g, '/').trim().replace(/\/+$/u, '');
+}
+
+function isParentPath(parent: string, child: string): boolean {
+	const normalizedParent = normalizeFolderPath(parent);
+	const normalizedChild = normalizeFolderPath(child);
+	return normalizedChild !== normalizedParent && normalizedChild.startsWith(`${normalizedParent}/`);
+}
+
+function hasChildFolderPermission(folderPermission: FolderPermission, folderPermissions: FolderPermission[]): boolean {
+	return folderPermissions.some((candidate) => isParentPath(folderPermission.path, candidate.path));
+}
+
+function getChildFolderPermissions(folderPermission: FolderPermission, folderPermissions: FolderPermission[]): FolderPermission[] {
+	const parentPath = normalizeFolderPath(folderPermission.path);
+	return folderPermissions.filter((candidate) => {
+		if (!isParentPath(folderPermission.path, candidate.path)) {
+			return false;
+		}
+		return !folderPermissions.some((other) => {
+			if (other.path === candidate.path) {
+				return false;
+			}
+			return isParentPath(parentPath, other.path) && isParentPath(other.path, candidate.path);
+		});
+	});
+}
+
 export function isACPMNode(node: { type: string }): node is ACPMNode {
 	return isACPMNodeType(node.type);
 }
@@ -143,13 +171,18 @@ export function getACPMChildren(node: ACPMNode): ACPMNode[] {
 			return [];
 		}
 
+		const folderPermissions = preset.folderPermissions.filter((folderPermission) =>
+			!preset.folderPermissions.some((candidate) => candidate !== folderPermission && isParentPath(candidate.path, folderPermission.path))
+		);
+
 		return [
-			...preset.folderPermissions.map<ACPMNode>((folderPermission) => ({
+			...folderPermissions.map<ACPMNode>((folderPermission) => ({
 				type: 'acpm-folder-perm',
 				uri: node.uri,
 				label: formatFolderPermissionLabel(folderPermission),
 				tooltip: `${folderPermission.access} • ${folderPermission.path}`,
 				folderPermission,
+				preset,
 				parentPresetName: preset.name
 			})),
 			...preset.toolPermissions.map<ACPMNode>((toolPermission) => ({
@@ -163,15 +196,36 @@ export function getACPMChildren(node: ACPMNode): ACPMNode[] {
 		];
 	}
 
+	if (node.type === 'acpm-folder-perm') {
+		const preset = node.preset;
+		const folderPermission = node.folderPermission;
+		if (!preset || !folderPermission) {
+			return [];
+		}
+
+		return getChildFolderPermissions(folderPermission, preset.folderPermissions).map<ACPMNode>((childFolderPermission) => ({
+			type: 'acpm-folder-perm',
+			uri: node.uri,
+			label: formatFolderPermissionLabel(childFolderPermission),
+			tooltip: `${childFolderPermission.access} • ${childFolderPermission.path}`,
+			folderPermission: childFolderPermission,
+			preset,
+			parentPresetName: preset.name
+		}));
+	}
+
 	return [];
 }
 
 export function getACPMTreeItem(node: ACPMNode): vscode.TreeItem {
+	const folderHasChildren = node.type === 'acpm-folder-perm' && !!node.preset && !!node.folderPermission && hasChildFolderPermission(node.folderPermission, node.preset.folderPermissions);
 	const collapsibleState =
 		node.type === 'acpm-root'
 			? vscode.TreeItemCollapsibleState.Expanded
 			: node.type === 'acpm-preset' && node.preset
 				? vscode.TreeItemCollapsibleState.Collapsed
+				: folderHasChildren
+					? vscode.TreeItemCollapsibleState.Collapsed
 				: vscode.TreeItemCollapsibleState.None;
 
 	const item = new vscode.TreeItem(node.label, collapsibleState);
@@ -204,5 +258,10 @@ export function getACPMTreeItem(node: ACPMNode): vscode.TreeItem {
 
 	item.contextValue = 'contexty.acpm.tool-perm';
 	item.iconPath = new vscode.ThemeIcon(node.toolPermission?.enabled ? 'check' : 'x');
+	item.command = {
+		command: 'contexty.acpm.toggleTool',
+		title: 'Toggle Tool',
+		arguments: [node]
+	};
 	return item;
 }
