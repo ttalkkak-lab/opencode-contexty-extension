@@ -33,17 +33,14 @@ export class MetricsState {
 		this.currentSessionId = sessionId;
 
 		if (sessionId) {
-			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-			if (workspaceRoot) {
-				const pattern = new vscode.RelativePattern(workspaceRoot, `.contexty/sessions/${sessionId}/metrics.json`);
-				this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
-				this.subscriptions.push(
-					this.watcher,
-					this.watcher.onDidCreate(() => this.refreshSoon()),
-					this.watcher.onDidChange(() => this.refreshSoon()),
-					this.watcher.onDidDelete(() => this.onMetricsUpdate?.(null))
-				);
-			}
+			const pattern = `**/.contexty/sessions/${sessionId}/metrics.json`;
+			this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
+			this.subscriptions.push(
+				this.watcher,
+				this.watcher.onDidCreate(() => this.refreshSoon()),
+				this.watcher.onDidChange(() => this.refreshSoon()),
+				this.watcher.onDidDelete(() => this.onMetricsUpdate?.(null))
+			);
 		}
 
 		void this.loadAndNotify();
@@ -67,14 +64,19 @@ export class MetricsState {
 
 	private async loadSnapshot(): Promise<MetricsSnapshot | null> {
 		const sessionId = this.currentSessionId;
-		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-		if (!sessionId || !workspaceRoot) {
+		if (!sessionId) {
 			return null;
 		}
 
-		const fileUri = vscode.Uri.joinPath(workspaceRoot, '.contexty', 'sessions', sessionId, 'metrics.json');
 		try {
-			const raw = await vscode.workspace.fs.readFile(fileUri);
+			const uris = await vscode.workspace.findFiles(
+				`**/.contexty/sessions/${sessionId}/metrics.json`,
+				'**/node_modules/**'
+			);
+			if (uris.length === 0) {
+				return null;
+			}
+			const raw = await vscode.workspace.fs.readFile(uris[0]);
 			return JSON.parse(this.decoder.decode(raw)) as MetricsSnapshot;
 		} catch {
 			return null;
