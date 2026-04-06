@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 import { ContextExplorerProvider, ContextNode, ContextDragAndDropController } from './contextExplorer';
-import { ContextState } from './state';
+import { ContextState, watchPruningState } from './state';
 import { SelectionLensProvider } from './selectionLens';
 import { ContextHighlights } from './contextHighlights';
 import { SessionDiscovery } from './sessionDiscovery';
@@ -42,6 +42,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	const metricsState = new MetricsState(context.subscriptions);
 	const dashboardProvider = new DashboardProvider();
 	let dashboardPanel: vscode.WebviewPanel | undefined;
+	const workspaceRoot = workspaceFolders?.find((folder) => folder.uri.scheme === 'file')?.uri.fsPath;
+
+	const syncPruningWatcher = async (): Promise<void> => {
+		const sessionId = state.getSessionId();
+		if (!workspaceRoot || !sessionId) {
+			return;
+		}
+
+		await watchPruningState(workspaceRoot, sessionId, () => {
+			provider.refresh();
+		});
+	};
 
 	const openDashboard = () => {
 		if (dashboardPanel) {
@@ -427,6 +439,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					}
 					state.setSessionId(sessionId);
 					metricsState.setSessionId(sessionId);
+					void syncPruningWatcher();
 				}
 
 			provider.refresh();
@@ -550,6 +563,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		sessionDiscovery.onDidChangeActiveSession((session) => {
 			state.setSessionId(session.sessionId);
 			metricsState.setSessionId(session.sessionId);
+			void syncPruningWatcher();
 			provider.refresh();
 			acpmProvider.refresh();
 			highlights.refreshAll();
@@ -560,6 +574,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					if (sessionDiscovery.getAllSessions().length === 0) {
 						state.setSessionId(undefined);
 						metricsState.setSessionId(undefined);
+						void syncPruningWatcher();
 						provider.refresh();
 						acpmProvider.refresh();
 						highlights.refreshAll();
@@ -570,6 +585,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 				if (!sessionDiscovery.isAutoMode()) {
 					metricsState.setSessionId(state.getSessionId());
+					void syncPruningWatcher();
 					provider.refresh();
 					acpmProvider.refresh();
 					highlights.refreshAll();
@@ -581,6 +597,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	if (activeSession) {
 		state.setSessionId(activeSession.sessionId);
 		metricsState.setSessionId(activeSession.sessionId);
+		void syncPruningWatcher();
 	}
 	updateSessionStatusBar();
 	openDashboard();

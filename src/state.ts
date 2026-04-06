@@ -88,6 +88,226 @@ function isFullFilePart(part: ToolPart): boolean {
 	return part.state.metadata?.truncated === false;
 }
 
+export interface PruningEntry {
+	callId: string;
+	tool: string;
+	turn: number;
+	reason: 'deduplication' | 'purge-errors';
+	tokenCount?: number;
+}
+
+export interface CompressionBlockView {
+	blockId: number;
+	topic: string;
+	startId: string;
+	endId: string;
+	compressedTokens: number;
+	summaryTokens: number;
+	active: boolean;
+	mode: string;
+	createdAt: number;
+	summary: string;
+}
+
+export interface PruningSessionData {
+	sessionId: string;
+	entries: PruningEntry[];
+	blocks: CompressionBlockView[];
+	totalPrunedTokens: number;
+	totalSummaryTokens: number;
+}
+
+type SerializedPruningSessionData = {
+	sessionId?: unknown;
+	entries?: unknown;
+	blocks?: unknown;
+	totalPrunedTokens?: unknown;
+	totalSummaryTokens?: unknown;
+	prune?: {
+		entries?: unknown;
+		blocks?: unknown;
+		totalPrunedTokens?: unknown;
+		totalSummaryTokens?: unknown;
+		[key: string]: unknown;
+	};
+	[key: string]: unknown;
+};
+
+const pruningWatchers = new Map<string, vscode.FileSystemWatcher>();
+const pruningWatcherTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function toString(value: unknown): string {
+	return typeof value === 'string' ? value : '';
+}
+
+function toNumber(value: unknown): number {
+	return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function toBoolean(value: unknown): boolean {
+	return typeof value === 'boolean' ? value : false;
+}
+
+function normalizeReason(value: unknown): PruningEntry['reason'] {
+	return value === 'purge-errors' ? 'purge-errors' : 'deduplication';
+}
+
+function deserializePruningEntry(value: unknown): PruningEntry | null {
+	if (!isRecord(value)) {
+		return null;
+	}
+
+	const callId = toString(value.callId ?? value.callID);
+	const tool = toString(value.tool);
+	const turn = toNumber(value.turn);
+	if (!callId || !tool || turn < 0) {
+		return null;
+	}
+
+	const entry: PruningEntry = {
+		callId,
+		tool,
+		turn,
+		reason: normalizeReason(value.reason),
+	};
+
+	if (typeof value.tokenCount === 'number' && Number.isFinite(value.tokenCount)) {
+		entry.tokenCount = value.tokenCount;
+	}
+
+	return entry;
+}
+
+function deserializeCompressionBlockView(value: unknown): CompressionBlockView | null {
+	if (!isRecord(value)) {
+		return null;
+	}
+
+	const blockId = toNumber(value.blockId);
+	const topic = toString(value.topic);
+	const startId = toString(value.startId);
+	const endId = toString(value.endId);
+	if (blockId < 0 || !topic || !startId || !endId) {
+		return null;
+	}
+
+	return {
+		blockId,
+		topic,
+		startId,
+		endId,
+		compressedTokens: toNumber(value.compressedTokens),
+		summaryTokens: toNumber(value.summaryTokens),
+		active: toBoolean(value.active),
+		mode: toString(value.mode) || 'range',
+		createdAt: toNumber(value.createdAt),
+		summary: toString(value.summary),
+	};
+}
+
+function deserializePruningSessionData(raw: SerializedPruningSessionData): PruningSessionData | null {
+	const source = isRecord(raw.prune) ? raw.prune : raw;
+	const sessionId = toString(source.sessionId ?? raw.sessionId);
+	if (!sessionId) {
+		return null;
+	}
+
+	const entries = Array.isArray(source.entries)
+		? source.entries.map((entry) => deserializePruningEntry(entry)).filter((entry): entry is PruningEntry => entry !== null)
+		: [];
+	const blocks = Array.isArray(source.blocks)
+		? source.blocks.map((block) => deserializeCompressionBlockView(block)).filter((block): block is CompressionBlockView => block !== null)
+		: [];
+
+	const totalPrunedTokens = typeof source.totalPrunedTokens === 'number'
+		? source.totalPrunedTokens
+		: entries.reduce((sum, entry) => sum + (entry.tokenCount ?? 0), 0);
+	const totalSummaryTokens = typeof source.totalSummaryTokens === 'number'
+		? source.totalSummaryTokens
+		: blocks.reduce((sum, block) => sum + block.summaryTokens, 0);
+
+	return {
+		sessionId,
+		entries,
+		blocks,
+		totalPrunedTokens,
+		totalSummaryTokens,
+	};
+}
+
+async function readJSON<T>(filePath: string): Promise<T | null> {
+	try {
+		const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+		return JSON.parse(Buffer.from(raw).toString('utf8')) as T;
+	} catch {
+		return null;
+	}
+}
+
+function pruningStatePath(workspaceRoot: string, sessionId: string): string {
+	return path.join(workspaceRoot, '.contexty', 'sessions', sessionId, 'pruning-state.json');
+}
+
+function pruningStatePattern(workspaceRoot: string, sessionId: string): vscode.RelativePattern {
+	return new vscode.RelativePattern(vscode.Uri.file(workspaceRoot), path.join('.contexty', 'sessions', sessionId, 'pruning-state.json'));
+}
+
+export async function loadPruningHistory(workspaceRoot: string, sessionId: string): Promise<PruningSessionData | null> {
+	const raw = await readJSON<SerializedPruningSessionData>(pruningStatePath(workspaceRoot, sessionId));
+	if (!raw) {
+		return null;
+	}
+
+	return deserializePruningSessionData(raw);
+}
+
+export function getActivePruningEntries(data: PruningSessionData): PruningEntry[] {
+	return data.entries.filter((entry): entry is PruningEntry => !!entry);
+}
+
+export function getCompressionBlocks(data: PruningSessionData): CompressionBlockView[] {
+	return data.blocks;
+}
+
+export async function watchPruningState(
+	workspaceRoot: string,
+	sessionId: string,
+	onChange: (data: PruningSessionData) => void
+): Promise<void> {
+	const key = pruningStatePath(workspaceRoot, sessionId);
+	pruningWatchers.get(key)?.dispose();
+	const watcher = vscode.workspace.createFileSystemWatcher(pruningStatePattern(workspaceRoot, sessionId));
+	pruningWatchers.set(key, watcher);
+
+	const refresh = async () => {
+		const data = await loadPruningHistory(workspaceRoot, sessionId);
+		if (data) {
+			onChange(data);
+		}
+	};
+
+	const queueRefresh = () => {
+		const existing = pruningWatcherTimers.get(key);
+		if (existing) {
+			clearTimeout(existing);
+		}
+		const timer = setTimeout(() => {
+			pruningWatcherTimers.delete(key);
+			void refresh();
+		}, 150);
+		pruningWatcherTimers.set(key, timer);
+	};
+
+	watcher.onDidCreate(queueRefresh);
+	watcher.onDidChange(queueRefresh);
+	watcher.onDidDelete(queueRefresh);
+	await refresh();
+}
+
 async function formatFileWithNumbers(uri: vscode.Uri): Promise<{
 	output: string;
 	preview: string;
