@@ -49,14 +49,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	const updateSessionStatusBar = () => {
 		const sessionId = state.getSessionId();
-		if (sessionId) {
-			const shortId = sessionId.length > 12 ? `${sessionId.slice(0, 12)}…` : sessionId;
-			sessionStatusBar.text = `$(remote) ${sessionDiscovery.isAutoMode() ? '$(sync) ' : ''}${shortId}`;
-			sessionStatusBar.show();
-		} else {
+		if (!sessionId) {
 			sessionStatusBar.text = '$(remote) No session';
 			sessionStatusBar.show();
+			return;
 		}
+		const sessions = sessionDiscovery.getAllSessions();
+		const session = sessions.find((s) => s.sessionId === sessionId);
+		const displayTitle = session?.title || (sessionId.length > 20 ? `${sessionId.slice(0, 20)}…` : sessionId);
+		sessionStatusBar.text = `$(remote) ${sessionDiscovery.isAutoMode() ? '$(sync) ' : ''}${displayTitle}`;
+		sessionStatusBar.show();
 	};
 
 	const treeView = vscode.window.createTreeView('contexty.hscmm.explorer', {
@@ -353,10 +355,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			const sessionItems: Array<vscode.QuickPickItem & { sessionId: string }> = sessions.map((s) => {
 				const isActive = s.sessionId === currentSessionId;
+				const displayLabel = s.title || s.sessionId;
 				return {
-					label: `${isActive ? '$(check) ' : ''}${s.sessionId}`,
-					description: `${s.lastModified.toLocaleString()}`,
-					detail: s.path.fsPath,
+					label: `${isActive ? '$(check) ' : ''}${displayLabel}`,
+					description: s.sessionId,
+					detail: s.lastModified.toLocaleString(),
 					sessionId: s.sessionId,
 				};
 			});

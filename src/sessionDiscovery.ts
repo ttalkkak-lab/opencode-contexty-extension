@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 export interface SessionInfo {
 	sessionId: string;
+	title?: string;
 	lastModified: Date;
 	path: vscode.Uri;
 }
@@ -64,6 +65,15 @@ export class SessionDiscovery {
 						lastModified: new Date(stat.mtime),
 						path: vscode.Uri.joinPath(uri, '..')
 					});
+					const metaUri = vscode.Uri.joinPath(uri, '..', 'meta.json');
+					try {
+						const metaRaw = await vscode.workspace.fs.readFile(metaUri);
+						const meta = JSON.parse(Buffer.from(metaRaw).toString('utf8'));
+						if (typeof meta?.title === 'string' && meta.title.trim()) {
+							sessions[sessions.length - 1].title = meta.title.trim();
+						}
+					} catch {
+					}
 				}
 			} catch {
 				continue;
