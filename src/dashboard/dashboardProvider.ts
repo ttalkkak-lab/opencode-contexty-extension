@@ -27,7 +27,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider, vscode.Dis
 			return;
 		}
 
-		this.view?.webview.postMessage({ type: 'update', data: snapshot });
+		this.view.webview.html = renderDashboard(snapshot);
 	}
 
 	dispose(): void {
