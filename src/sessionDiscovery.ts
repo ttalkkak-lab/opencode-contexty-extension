@@ -8,12 +8,28 @@ export interface SessionInfo {
 
 export class SessionDiscovery {
 	private sessions: SessionInfo[] = [];
+	private autoMode = true;
 	private readonly _onDidChangeSessions = new vscode.EventEmitter<void>();
 	readonly onDidChangeSessions = this._onDidChangeSessions.event;
+	private readonly _onDidChangeActiveSession = new vscode.EventEmitter<SessionInfo>();
+	readonly onDidChangeActiveSession = this._onDidChangeActiveSession.event;
 	private watcher: vscode.FileSystemWatcher | null = null;
 
-	constructor(private readonly subscriptions: vscode.Disposable[]) {
+	constructor(private readonly subscriptions: vscode.Disposable[], autoMode = true) {
+		this.autoMode = autoMode;
 		this.startWatching();
+	}
+
+	isAutoMode(): boolean {
+		return this.autoMode;
+	}
+
+	setAutoMode(enabled: boolean): void {
+		this.autoMode = enabled;
+	}
+
+	toggleAutoMode(): void {
+		this.autoMode = !this.autoMode;
 	}
 
 	private startWatching(): void {
@@ -28,6 +44,9 @@ export class SessionDiscovery {
 
 	async refresh(): Promise<void> {
 		this.sessions = await this.discoverSessions();
+		if (this.autoMode && this.sessions.length > 0) {
+			this._onDidChangeActiveSession.fire(this.sessions[0]);
+		}
 		this._onDidChangeSessions.fire();
 	}
 
@@ -67,6 +86,7 @@ export class SessionDiscovery {
 	}
 
 	dispose(): void {
+		this._onDidChangeActiveSession.dispose();
 		this._onDidChangeSessions.dispose();
 	}
 }

@@ -38,18 +38,20 @@ export async function activate(context: vscode.ExtensionContext) {
 	const highlights = new ContextHighlights(state);
 	const sessionDiscovery = new SessionDiscovery(context.subscriptions);
 
-	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-	statusBarItem.command = 'contexty.hscmm.addSelectionToContextWithCurrent';
-	statusBarItem.text = '$(plus) Add to Context';
-	statusBarItem.tooltip = 'Add current selection to context';
-	context.subscriptions.push(statusBarItem);
+	const sessionStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+	sessionStatusBar.command = 'contexty.session.select';
+	sessionStatusBar.tooltip = 'Current session (click to switch)';
+	context.subscriptions.push(sessionStatusBar);
 
-	const updateStatusBar = () => {
-		const editor = vscode.window.activeTextEditor;
-		if (editor && !editor.selection.isEmpty) {
-			statusBarItem.show();
+	const updateSessionStatusBar = () => {
+		const sessionId = state.getSessionId();
+		if (sessionId) {
+			const shortId = sessionId.length > 12 ? `${sessionId.slice(0, 12)}…` : sessionId;
+			sessionStatusBar.text = `$(remote) ${sessionDiscovery.isAutoMode() ? '$(sync) ' : ''}${shortId}`;
+			sessionStatusBar.show();
 		} else {
-			statusBarItem.hide();
+			sessionStatusBar.text = '$(remote) No session';
+			sessionStatusBar.show();
 		}
 	};
 
@@ -72,14 +74,12 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 			selectionLens.updateSelection(event.textEditor.document.uri, event.selections[0]);
-			updateStatusBar();
 		})
 	);
 
 	context.subscriptions.push(
 		vscode.window.onDidChangeActiveTextEditor(() => {
 			highlights.refreshAll();
-			updateStatusBar();
 		}),
 		vscode.window.onDidChangeVisibleTextEditors(() => {
 			highlights.refreshAll();
@@ -331,23 +331,62 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			const items = sessions.map((s) => ({
-				label: s.sessionId,
-				description: `${s.lastModified.toLocaleString()}`,
-				detail: s.path.fsPath,
-			}));
+			const autoMode = sessionDiscovery.isAutoMode();
+			const currentSessionId = state.getSessionId();
 
-			const selected = await vscode.window.showQuickPick(items, {
-				title: 'Select Session',
-				placeHolder: 'Choose a session to view its context',
+			const autoItem: vscode.QuickPickItem = {
+				label: autoMode ? '$(check) $(sync) Automatic' : '$(sync) Automatic',
+				description: 'Auto-switch to most recent session',
+				detail: 'Continuously track the newest active session',
+			};
+
+			const sessionItems: Array<vscode.QuickPickItem & { sessionId: string }> = sessions.map((s) => {
+				const isActive = s.sessionId === currentSessionId;
+				return {
+					label: `${isActive ? '$(check) ' : ''}${s.sessionId}`,
+					description: `${s.lastModified.toLocaleString()}`,
+					detail: s.path.fsPath,
+					sessionId: s.sessionId,
+				};
 			});
+			const quickPick = vscode.window.createQuickPick<vscode.QuickPickItem & { sessionId?: string }>();
+			quickPick.title = 'Select Session';
+			quickPick.placeholder = 'Choose a session to view its context';
+			quickPick.matchOnDescription = true;
+			quickPick.matchOnDetail = true;
+			quickPick.items = [autoItem, ...sessionItems];
+			quickPick.activeItems = [currentSessionId ? sessionItems.find((s) => s.sessionId === currentSessionId) ?? autoItem : autoItem];
 
-			if (selected) {
-				state.setSessionId(selected.label);
-				provider.refresh();
-				acpmProvider.refresh();
-				highlights.refreshAll();
+			const selected = await new Promise<(vscode.QuickPickItem & { sessionId?: string }) | undefined>((resolve) => {
+				quickPick.onDidAccept(() => {
+					resolve(quickPick.selectedItems[0]);
+					quickPick.hide();
+				});
+				quickPick.onDidHide(() => resolve(undefined));
+				quickPick.show();
+			});
+			quickPick.dispose();
+
+			if (!selected) {
+				return;
 			}
+
+			if (selected === autoItem) {
+				sessionDiscovery.setAutoMode(true);
+				await sessionDiscovery.refresh();
+			} else {
+				sessionDiscovery.setAutoMode(false);
+				const sessionId = selected.sessionId;
+				if (!sessionId) {
+					return;
+				}
+				state.setSessionId(sessionId);
+			}
+
+			provider.refresh();
+			acpmProvider.refresh();
+			highlights.refreshAll();
+			updateSessionStatusBar();
 		}),
 		vscode.commands.registerCommand('contexty.hscmm.addSelectionToContextWithCurrent', async () => {
 			const editor = vscode.window.activeTextEditor;
@@ -461,21 +500,44 @@ export async function activate(context: vscode.ExtensionContext) {
 		)
 	);
 
-	context.subscriptions.push(sessionDiscovery.onDidChangeSessions(() => {
-		provider.refresh();
-		acpmProvider.refresh();
-		highlights.refreshAll();
-	}));
+	context.subscriptions.push(
+		sessionDiscovery.onDidChangeActiveSession((session) => {
+			state.setSessionId(session.sessionId);
+			provider.refresh();
+			acpmProvider.refresh();
+			highlights.refreshAll();
+			updateSessionStatusBar();
+		}),
+		sessionDiscovery.onDidChangeSessions(() => {
+			if (sessionDiscovery.isAutoMode()) {
+				if (sessionDiscovery.getAllSessions().length === 0) {
+					state.setSessionId(undefined);
+					provider.refresh();
+					acpmProvider.refresh();
+					highlights.refreshAll();
+					updateSessionStatusBar();
+				}
+				return;
+			}
+			if (!sessionDiscovery.isAutoMode()) {
+				provider.refresh();
+				acpmProvider.refresh();
+				highlights.refreshAll();
+			}
+		})
+	);
 
 	const activeSession = await sessionDiscovery.getActiveSession();
 	if (activeSession) {
 		state.setSessionId(activeSession.sessionId);
 	}
+	updateSessionStatusBar();
 
 	void state.refreshFromDisk().then(() => {
 		provider.refresh();
 		highlights.refreshAll();
 		refreshAcpmView(acpmProvider);
+		updateSessionStatusBar();
 	});
 }
 
