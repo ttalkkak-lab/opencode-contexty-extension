@@ -389,8 +389,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				const displayLabel = s.title || s.sessionId;
 				return {
 					label: `${isActive ? '$(check) ' : ''}${displayLabel}`,
-					description: s.sessionId,
-					detail: s.lastModified.toLocaleString(),
+					description: s.title ? s.sessionId : s.lastModified.toLocaleString(),
 					sessionId: s.sessionId,
 				};
 			});
@@ -398,7 +397,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			quickPick.title = 'Select Session';
 			quickPick.placeholder = 'Choose a session to view its context';
 			quickPick.matchOnDescription = true;
-			quickPick.matchOnDetail = true;
 			quickPick.items = [autoItem, ...sessionItems];
 			quickPick.activeItems = [currentSessionId ? sessionItems.find((s) => s.sessionId === currentSessionId) ?? autoItem : autoItem];
 
