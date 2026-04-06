@@ -41,6 +41,29 @@ export async function activate(context: vscode.ExtensionContext) {
 	const sessionDiscovery = new SessionDiscovery(context.subscriptions);
 	const metricsState = new MetricsState(context.subscriptions);
 	const dashboardProvider = new DashboardProvider();
+	let dashboardPanel: vscode.WebviewPanel | undefined;
+
+	const openDashboard = () => {
+		if (dashboardPanel) {
+			dashboardPanel.reveal(vscode.ViewColumn.One);
+			dashboardPanel.webview.html = dashboardProvider.render();
+			return;
+		}
+
+		dashboardPanel = vscode.window.createWebviewPanel(
+			DashboardProvider.viewType,
+			'Session Insight',
+			vscode.ViewColumn.One,
+			{
+				enableScripts: true,
+				retainContextWhenHidden: true
+			}
+		);
+		dashboardPanel.webview.html = dashboardProvider.render();
+		dashboardPanel.onDidDispose(() => {
+			dashboardPanel = undefined;
+		});
+	};
 
 	const sessionStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	sessionStatusBar.command = 'contexty.session.select';
@@ -73,9 +96,20 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(treeView, acpmTreeView, highlights);
 	context.subscriptions.push(
-		vscode.window.registerWebviewViewProvider('contexty.dashboard.insight', dashboardProvider)
+		vscode.commands.registerCommand('contexty.dashboard.open', () => {
+			openDashboard();
+		}),
+		vscode.commands.registerCommand('contexty.dashboard.refresh', () => {
+			metricsState.setSessionId(metricsState.currentSessionId);
+			openDashboard();
+		})
 	);
-	metricsState.onMetricsUpdate = (snapshot) => dashboardProvider.updateMetrics(snapshot);
+	metricsState.onMetricsUpdate = (snapshot) => {
+		dashboardProvider.updateMetrics(snapshot);
+		if (dashboardPanel) {
+			dashboardPanel.webview.html = dashboardProvider.render();
+		}
+	};
 
 	context.subscriptions.push(
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, selectionLens),
@@ -100,9 +134,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('contexty.acpm.refresh', () => {
 			refreshAcpmView(acpmProvider);
-		}),
-		vscode.commands.registerCommand('contexty.dashboard.refresh', () => {
-			metricsState.setSessionId(metricsState.currentSessionId);
 		}),
 		vscode.commands.registerCommand('contexty.acpm.createPreset', async () => {
 			const name = await vscode.window.showInputBox({
@@ -552,6 +583,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		metricsState.setSessionId(activeSession.sessionId);
 	}
 	updateSessionStatusBar();
+	openDashboard();
 
 	void state.refreshFromDisk().then(() => {
 		provider.refresh();

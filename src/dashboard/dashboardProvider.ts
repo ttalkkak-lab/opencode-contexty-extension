@@ -2,35 +2,19 @@ import * as vscode from 'vscode';
 import { renderDashboard } from './panel';
 import type { MetricsSnapshot } from './metricsState';
 
-export class DashboardProvider implements vscode.WebviewViewProvider, vscode.Disposable {
-	private view: vscode.WebviewView | undefined;
+export class DashboardProvider implements vscode.Disposable {
 	private currentSnapshot: MetricsSnapshot | null = null;
 
-	resolveWebviewView(webviewView: vscode.WebviewView): void {
-		this.view = webviewView;
+	static readonly viewType = 'contexty.dashboard.insight';
 
-		webviewView.webview.options = {
-			enableScripts: true,
-			localResourceRoots: []
-		};
-
-		webviewView.webview.html = renderDashboard(this.currentSnapshot);
-	}
-
-	onDidChangeVisibility?(_visibility: boolean): void {
+	render(): string {
+		return renderDashboard(this.currentSnapshot);
 	}
 
 	updateMetrics(snapshot: MetricsSnapshot | null): void {
 		this.currentSnapshot = snapshot;
-
-		if (!this.view) {
-			return;
-		}
-
-		this.view.webview.html = renderDashboard(snapshot);
 	}
 
 	dispose(): void {
-		this.view = undefined;
 	}
 }
