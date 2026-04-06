@@ -539,7 +539,7 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
     }
 
     function truncatePath(filePath) {
-      const parts = String(filePath).replace(/\\/g, '/').split('/').filter(Boolean);
+      const parts = String(filePath).split(/[\\/]/).filter(Boolean);
       if (parts.length <= 2) {
         return parts.join('/');
       }
