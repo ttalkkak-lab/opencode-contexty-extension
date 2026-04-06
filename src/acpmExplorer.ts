@@ -12,6 +12,7 @@ import {
 	type PermissionsFile,
 	type Preset
 } from './acpmNodes';
+import { ContextState } from './state';
 
 function getWorkspaceRootUri(): vscode.Uri | undefined {
 	return vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === 'file')?.uri;
@@ -66,6 +67,23 @@ export async function readPermissionsFile(): Promise<PermissionsFile> {
 		const defaults = createDefaultPermissionsFile(workspaceRoot);
 		await writePermissionsFile(defaults);
 		return defaults;
+	}
+}
+
+async function readSessionActivePreset(sessionId: string): Promise<string | undefined> {
+	const fileUri = getWorkspaceRootUri()
+		? vscode.Uri.joinPath(getWorkspaceRootUri()!, '.contexty', 'sessions', sessionId, 'active-preset.json')
+		: undefined;
+	if (!fileUri) {
+		return undefined;
+	}
+
+	try {
+		const raw = await readFile(fileUri.fsPath, 'utf8');
+		const parsed = JSON.parse(raw) as { presetName?: unknown };
+		return typeof parsed.presetName === 'string' ? parsed.presetName : undefined;
+	} catch {
+		return undefined;
 	}
 }
 
@@ -126,13 +144,21 @@ export class AcpmExplorerProvider implements vscode.TreeDataProvider<ACPMNode> {
 
 	private refreshTimer: NodeJS.Timeout | undefined;
 
-	constructor(private readonly disposables: vscode.Disposable[]) {
+	constructor(
+		private readonly disposables: vscode.Disposable[],
+		private readonly state?: ContextState
+	) {
 		const watcher = vscode.workspace.createFileSystemWatcher('**/.contexty/permissions.json');
+		const sessionWatcher = vscode.workspace.createFileSystemWatcher('**/.contexty/sessions/*/active-preset.json');
 		this.disposables.push(
 			watcher,
 			watcher.onDidCreate(() => this.refreshSoon()),
 			watcher.onDidChange(() => this.refreshSoon()),
-			watcher.onDidDelete(() => this.refreshSoon())
+			watcher.onDidDelete(() => this.refreshSoon()),
+			sessionWatcher,
+			sessionWatcher.onDidCreate(() => this.refreshSoon()),
+			sessionWatcher.onDidChange(() => this.refreshSoon()),
+			sessionWatcher.onDidDelete(() => this.refreshSoon())
 		);
 	}
 
@@ -159,6 +185,13 @@ export class AcpmExplorerProvider implements vscode.TreeDataProvider<ACPMNode> {
 
 		if (!node) {
 			const permissionsFile = await readPermissionsFile();
+			const sessionId = this.state?.getSessionId();
+			if (sessionId) {
+				const sessionActivePreset = await readSessionActivePreset(sessionId);
+				if (sessionActivePreset) {
+					permissionsFile.activePreset = sessionActivePreset;
+				}
+			}
 			return [{ type: 'acpm-root', uri: workspaceRoot, label: 'ACPM', permissionsFile }];
 		}
 
