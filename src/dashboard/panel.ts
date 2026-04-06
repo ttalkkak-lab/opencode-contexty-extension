@@ -59,18 +59,20 @@ export function renderContextGauge(tokens: TokenMetrics | null): string {
 	const circumference = Math.PI * radius;
 	const arc = 'M 68 120 A 52 52 0 0 1 172 120';
   const segments = [
-    { label: 'input', value: input, color: 'var(--vscode-chart-blue, var(--vscode-foreground))' },
-    { label: 'output', value: output, color: 'var(--vscode-chart-green, var(--vscode-foreground))' },
-    { label: 'reasoning', value: reasoning, color: 'var(--vscode-chart-yellow, var(--vscode-foreground))' }
+    { label: 'input', value: input, color: 'var(--chart-blue)' },
+    { label: 'output', value: output, color: 'var(--chart-green)' },
+    { label: 'reasoning', value: reasoning, color: 'var(--chart-yellow)' }
   ];
 
   let dashOffset = 0;
-  const strokeSegments = segments.map((segment) => {
-    const segmentLength = total > 0 ? circumference * (segment.value / total) : 0;
-    const markup = `<path d="${arc}" pathLength="${circumference}" fill="none" stroke="${segment.color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${segmentLength} ${circumference}" stroke-dashoffset="${dashOffset}" />`;
-    dashOffset -= segmentLength;
-    return markup;
-  }).join('');
+  const strokeSegments = segments
+    .filter((s) => s.value > 0)
+    .map((segment) => {
+      const segmentLength = circumference * (segment.value / total);
+      const markup = `<path d="${arc}" pathLength="${circumference}" fill="none" stroke="${segment.color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${segmentLength} ${circumference}" stroke-dashoffset="${dashOffset}" />`;
+      dashOffset -= segmentLength;
+      return markup;
+    }).join('');
 
   const indicatorItems = segments.map((segment) => {
     return `<div class="legend-item"><span class="legend-swatch" style="background:${segment.color}"></span><span>${escapeHtml(segment.label)} ${escapeHtml(formatNumber(segment.value))}</span></div>`;
@@ -79,7 +81,7 @@ export function renderContextGauge(tokens: TokenMetrics | null): string {
   return `
     <div class="gauge-shell">
       <svg class="gauge" viewBox="0 0 240 150" role="img" aria-label="Token distribution gauge">
-        <path d="${arc}" fill="none" stroke="var(--vscode-descriptionForeground)" stroke-opacity="0.25" stroke-width="10" stroke-linecap="round" />
+        <path d="${arc}" fill="none" stroke="var(--bar-track)" stroke-width="10" stroke-linecap="round" />
         ${strokeSegments}
         <circle cx="120" cy="120" r="34" class="gauge-core" />
         <text x="120" y="116" text-anchor="middle" class="gauge-total">${escapeHtml(formatNumber(total))}</text>
@@ -106,10 +108,10 @@ export function renderFileBreakdown(files: FileMetrics[] | null): string {
   const remaining = sorted.length - visible.length;
   const maxTokens = Math.max(1, ...visible.map((file) => Math.max(0, file.tokenEstimate ?? 0)));
   const palette = [
-    'var(--vscode-chart-blue, var(--vscode-foreground))',
-    'var(--vscode-chart-green, var(--vscode-foreground))',
-    'var(--vscode-chart-yellow, var(--vscode-foreground))',
-    'var(--vscode-chart-red, var(--vscode-foreground))'
+    'var(--chart-blue)',
+    'var(--chart-green)',
+    'var(--chart-yellow)',
+    'var(--chart-red)'
   ];
 
   const rows = visible.map((file, index) => {
@@ -213,7 +215,7 @@ export function renderAcpmStatus(acpm: AcpmMetrics | null): string {
               <span class="bar-value">${escapeHtml(formatNumber(entry.count))}</span>
             </div>
             <div class="bar-track">
-              <div class="bar-fill" style="width:${formatPercent(width)}; background:var(--vscode-chart-red, var(--vscode-foreground))"></div>
+              <div class="bar-fill" style="width:${formatPercent(width)}; background:var(--chart-red)"></div>
             </div>
           </div>
         `;
@@ -223,9 +225,9 @@ export function renderAcpmStatus(acpm: AcpmMetrics | null): string {
   const folderBars = folderTotal > 0
     ? `
       <div class="stacked-bar" aria-label="Folder access distribution">
-        <span class="stack-segment" style="width:${formatPercent((folderAccess.denied / folderTotal) * 100)}; background:var(--vscode-chart-red, var(--vscode-foreground))"></span>
-        <span class="stack-segment" style="width:${formatPercent((folderAccess['read-only'] / folderTotal) * 100)}; background:var(--vscode-chart-yellow, var(--vscode-foreground))"></span>
-        <span class="stack-segment" style="width:${formatPercent((folderAccess['read-write'] / folderTotal) * 100)}; background:var(--vscode-chart-green, var(--vscode-foreground))"></span>
+        <span class="stack-segment" style="width:${formatPercent((folderAccess.denied / folderTotal) * 100)}; background:var(--chart-red)"></span>
+        <span class="stack-segment" style="width:${formatPercent((folderAccess['read-only'] / folderTotal) * 100)}; background:var(--chart-yellow)"></span>
+        <span class="stack-segment" style="width:${formatPercent((folderAccess['read-write'] / folderTotal) * 100)}; background:var(--chart-green)"></span>
       </div>
       <div class="stack-legend">
         <span>Denied ${escapeHtml(formatNumber(folderAccess.denied))}</span>
@@ -268,8 +270,22 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
   <style>
     :root {
       color-scheme: light dark;
+      /* Guaranteed chart colors - never rely on vscode-chart-* variables */
+      --chart-blue: #4d9de0;
+      --chart-green: #57cc99;
+      --chart-yellow: #ffc145;
+      --chart-red: #e05780;
+      --chart-purple: #9b5de5;
+      --chart-orange: #f4845f;
       --panel-gap: 8px;
       --panel-padding: 10px;
+      --card-border: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+      --card-bg: color-mix(in srgb, var(--vscode-sideBar-background) 50%, var(--vscode-editor-background) 50%);
+      --muted-text: color-mix(in srgb, var(--vscode-foreground) 55%, transparent);
+      --bar-track: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
     }
     html, body {
       margin: 0;
@@ -279,34 +295,42 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
       font-family: var(--vscode-font-family, sans-serif);
     }
     body {
-      padding: 10px;
+      width: min(100%, 900px);
+      margin: 0 auto;
+      padding: 12px;
     }
     main {
-      display: grid;
-      gap: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: stretch;
     }
     .section {
-      padding: var(--panel-padding);
-      border: 1px solid var(--vscode-descriptionForeground);
+      flex: 1 1 calc(50% - 6px);
+      min-width: 0;
+      padding: 14px;
+      border: 1px solid var(--card-border);
       border-radius: 8px;
-      background: var(--vscode-sideBar-background);
+      background: var(--card-bg);
       overflow: hidden;
     }
     .section h2 {
-      margin: 0 0 8px;
-      color: var(--vscode-foreground);
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
+      margin: 0 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--card-border);
+      color: var(--muted-text);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
     }
     .section-content {
       color: var(--vscode-sideBar-foreground);
       font-size: 12px;
-      line-height: 1.35;
+      line-height: 1.45;
     }
     .empty-state {
-      color: var(--vscode-descriptionForeground);
+      color: var(--muted-text);
       font-style: italic;
       padding: 4px 0;
     }
@@ -321,8 +345,7 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
     }
     .gauge-core {
       fill: var(--vscode-sideBar-background);
-      stroke: var(--vscode-descriptionForeground);
-      stroke-opacity: 0.25;
+      stroke: var(--bar-track);
     }
     .gauge-total {
       fill: var(--vscode-foreground);
@@ -330,7 +353,7 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
       font-weight: 700;
     }
     .gauge-label {
-      fill: var(--vscode-descriptionForeground);
+      fill: var(--muted-text);
       font-size: 9px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -365,7 +388,7 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
     .bar-value,
     .status-value,
     .metric-meta {
-      color: var(--vscode-descriptionForeground);
+      color: var(--muted-text);
       white-space: nowrap;
     }
     .legend-grid {
@@ -378,7 +401,7 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
       display: flex;
       align-items: center;
       gap: 6px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--muted-text);
       min-width: 0;
     }
     .legend-swatch {
@@ -397,8 +420,7 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
       height: 6px;
       border-radius: 999px;
       overflow: hidden;
-      background: var(--vscode-descriptionForeground);
-      background-opacity: 0.15;
+      background: var(--bar-track);
     }
     .bar-fill {
       height: 100%;
@@ -411,20 +433,19 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
     }
     .bar-fill-success {
       height: 100%;
-      background: var(--vscode-chart-green, var(--vscode-foreground));
+      background: var(--chart-green);
     }
     .bar-fill-neutral {
       height: 100%;
-      background: var(--vscode-descriptionForeground);
-      opacity: 0.35;
+      background: var(--bar-track);
     }
     .bar-fill-fail {
       height: 100%;
-      background: var(--vscode-chart-red, var(--vscode-foreground));
+      background: var(--chart-red);
     }
     .bar-subtle,
     .overflow-note {
-      color: var(--vscode-descriptionForeground);
+      color: var(--muted-text);
       font-size: 11px;
     }
     .section-badge {
@@ -450,7 +471,7 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
     }
     .stack-legend {
       flex-wrap: wrap;
-      color: var(--vscode-descriptionForeground);
+      color: var(--muted-text);
       font-size: 11px;
     }
     .acpm-header {
@@ -465,7 +486,7 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
     }
     .acpm-counts {
       width: 100%;
-      color: var(--vscode-descriptionForeground);
+      color: var(--muted-text);
       font-size: 11px;
       flex-wrap: wrap;
     }
@@ -480,14 +501,23 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
       line-height: 1;
     }
     .status-dot.enabled {
-      color: var(--vscode-chart-green, var(--vscode-foreground));
+      color: var(--chart-green);
     }
     .status-dot.disabled {
-      color: var(--vscode-chart-red, var(--vscode-foreground));
+      color: var(--chart-red);
     }
     .bar-count {
-      color: var(--vscode-descriptionForeground);
+      color: var(--muted-text);
       font-weight: 400;
+    }
+    @media (max-width: 680px) {
+      body {
+        width: 100%;
+        padding: 10px;
+      }
+      .section {
+        flex-basis: 100%;
+      }
     }
   </style>
 </head>
@@ -564,13 +594,13 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
       const circumference = Math.PI * radius;
       const arc = 'M 68 120 A 52 52 0 0 1 172 120';
       const segments = [
-        { value: input, color: 'var(--vscode-chart-blue, var(--vscode-foreground))', label: 'input' },
-        { value: output, color: 'var(--vscode-chart-green, var(--vscode-foreground))', label: 'output' },
-        { value: reasoning, color: 'var(--vscode-chart-yellow, var(--vscode-foreground))', label: 'reasoning' }
+        { value: input, color: 'var(--chart-blue)', label: 'input' },
+        { value: output, color: 'var(--chart-green)', label: 'output' },
+        { value: reasoning, color: 'var(--chart-yellow)', label: 'reasoning' }
       ];
       let dashOffset = 0;
-      const strokeSegments = segments.map((segment) => {
-        const segmentLength = total > 0 ? circumference * (segment.value / total) : 0;
+      const strokeSegments = segments.filter(function(s) { return s.value > 0; }).map(function(segment) {
+        const segmentLength = circumference * (segment.value / total);
         const markup = '<path d="' + arc + '" pathLength="' + circumference + '" fill="none" stroke="' + segment.color + '" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + segmentLength + ' ' + circumference + '" stroke-dashoffset="' + dashOffset + '" />';
         dashOffset -= segmentLength;
         return markup;
@@ -581,7 +611,7 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
       return [
         '<div class="gauge-shell">',
         '<svg class="gauge" viewBox="0 0 240 150" role="img" aria-label="Token distribution gauge">',
-        '<path d="' + arc + '" fill="none" stroke="var(--vscode-descriptionForeground)" stroke-opacity="0.25" stroke-width="10" stroke-linecap="round" />',
+        '<path d="' + arc + '" fill="none" stroke="var(--bar-track)" stroke-width="10" stroke-linecap="round" />',
         strokeSegments,
         '<circle cx="120" cy="120" r="34" class="gauge-core" />',
         '<text x="120" y="116" text-anchor="middle" class="gauge-total">' + escapeHtml(formatNumber(total)) + '</text>',
@@ -607,10 +637,10 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
       const remaining = sorted.length - visible.length;
       const maxTokens = Math.max.apply(null, [1].concat(visible.map((file) => Math.max(0, file.tokenEstimate || 0))));
       const palette = [
-        'var(--vscode-chart-blue, var(--vscode-foreground))',
-        'var(--vscode-chart-green, var(--vscode-foreground))',
-        'var(--vscode-chart-yellow, var(--vscode-foreground))',
-        'var(--vscode-chart-red, var(--vscode-foreground))'
+        'var(--chart-blue)',
+        'var(--chart-green)',
+        'var(--chart-yellow)',
+        'var(--chart-red)'
       ];
       const rows = visible.map((file, index) => {
         const value = Math.max(0, file.tokenEstimate || 0);
@@ -672,15 +702,15 @@ function renderDocumentHtml(snapshot: MetricsSnapshot | null): string {
         return [
           '<div class="bar-row">',
           '<div class="bar-head"><span class="bar-label">' + escapeHtml(entry.category) + '</span><span class="bar-value">' + escapeHtml(formatNumber(entry.count)) + '</span></div>',
-          '<div class="bar-track"><div class="bar-fill" style="width:' + width.toFixed(1) + '%; background:var(--vscode-chart-red, var(--vscode-foreground))"></div></div>',
+          '<div class="bar-track"><div class="bar-fill" style="width:' + width.toFixed(1) + '%; background:var(--chart-red)"></div></div>',
           '</div>'
         ].join('');
       }).join('') : renderEmpty('No denied categories');
       const folderBars = folderTotal > 0 ? [
         '<div class="stacked-bar" aria-label="Folder access distribution">',
-        '<span class="stack-segment" style="width:' + (folderAccess.denied / folderTotal * 100).toFixed(1) + '%; background:var(--vscode-chart-red, var(--vscode-foreground))"></span>',
-        '<span class="stack-segment" style="width:' + (folderAccess['read-only'] / folderTotal * 100).toFixed(1) + '%; background:var(--vscode-chart-yellow, var(--vscode-foreground))"></span>',
-        '<span class="stack-segment" style="width:' + (folderAccess['read-write'] / folderTotal * 100).toFixed(1) + '%; background:var(--vscode-chart-green, var(--vscode-foreground))"></span>',
+        '<span class="stack-segment" style="width:' + (folderAccess.denied / folderTotal * 100).toFixed(1) + '%; background:var(--chart-red)"></span>',
+        '<span class="stack-segment" style="width:' + (folderAccess['read-only'] / folderTotal * 100).toFixed(1) + '%; background:var(--chart-yellow)"></span>',
+        '<span class="stack-segment" style="width:' + (folderAccess['read-write'] / folderTotal * 100).toFixed(1) + '%; background:var(--chart-green)"></span>',
         '</div>',
         '<div class="stack-legend"><span>Denied ' + escapeHtml(formatNumber(folderAccess.denied)) + '</span><span>Read-only ' + escapeHtml(formatNumber(folderAccess['read-only'])) + '</span><span>Read-write ' + escapeHtml(formatNumber(folderAccess['read-write'])) + '</span></div>'
       ].join('') : renderEmpty('No folder access data');
