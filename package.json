@@ -64,6 +64,11 @@
 				"icon": "$(clear-all)"
 			},
 			{
+				"command": "contexty.session.select",
+				"title": "Contexty: Select Session",
+				"category": "Contexty"
+			},
+			{
 				"command": "contexty.acpm.createPreset",
 				"title": "Create ACPM Preset",
 				"icon": "$(add)"
@@ -120,16 +125,21 @@
 					"when": "view == contexty.hscmm.explorer",
 					"group": "navigation"
 				},
-				{
-					"command": "contexty.hscmm.resetContext",
-					"when": "view == contexty.hscmm.explorer",
-					"group": "navigation@2"
-				},
-				{
-					"command": "contexty.acpm.refresh",
-					"when": "view == contexty.acpm.explorer",
-					"group": "navigation"
-				}
+			{
+				"command": "contexty.hscmm.resetContext",
+				"when": "view == contexty.hscmm.explorer",
+				"group": "navigation@2"
+			},
+			{
+				"command": "contexty.session.select",
+				"when": "view == contexty.hscmm.explorer",
+				"group": "navigation"
+			},
+			{
+				"command": "contexty.acpm.refresh",
+				"when": "view == contexty.acpm.explorer",
+				"group": "navigation"
+			}
 			],
 			"view/item/context": [
 				{

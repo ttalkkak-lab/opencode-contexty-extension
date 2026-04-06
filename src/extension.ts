@@ -4,6 +4,7 @@ import { ContextExplorerProvider, ContextNode, ContextDragAndDropController } fr
 import { ContextState } from './state';
 import { SelectionLensProvider } from './selectionLens';
 import { ContextHighlights } from './contextHighlights';
+import { SessionDiscovery } from './sessionDiscovery';
 import { AcpmDragAndDropController, AcpmExplorerProvider, clonePreset, readPermissionsFile, writePermissionsFile } from './acpmExplorer';
 import { ALL_TOOL_CATEGORIES, type ACPMNode, type FolderAccess, type PermissionsFile, type Preset, type ToolCategory, type ToolPermission } from './acpmNodes';
 
@@ -28,13 +29,14 @@ async function pickPreset(file: PermissionsFile, title: string): Promise<Preset 
 	return selected ? file.presets.find((preset) => preset.name === selected.label) : undefined;
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 	const workspaceFolders = vscode.workspace.workspaceFolders;
 	const state = new ContextState(context.workspaceState, workspaceFolders);
 	const provider = new ContextExplorerProvider(state, context.subscriptions);
-	const acpmProvider = new AcpmExplorerProvider(context.subscriptions);
+	const acpmProvider = new AcpmExplorerProvider(context.subscriptions, state);
 	const selectionLens = new SelectionLensProvider();
 	const highlights = new ContextHighlights(state);
+	const sessionDiscovery = new SessionDiscovery(context.subscriptions);
 
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	statusBarItem.command = 'contexty.hscmm.addSelectionToContextWithCurrent';
@@ -322,6 +324,31 @@ export function activate(context: vscode.ExtensionContext) {
 			await writePermissionsFile(file);
 			refreshAcpmView(acpmProvider);
 		}),
+		vscode.commands.registerCommand('contexty.session.select', async () => {
+			const sessions = sessionDiscovery.getAllSessions();
+			if (sessions.length === 0) {
+				vscode.window.showInformationMessage('No sessions found. Start an opencode session first.');
+				return;
+			}
+
+			const items = sessions.map((s) => ({
+				label: s.sessionId,
+				description: `${s.lastModified.toLocaleString()}`,
+				detail: s.path.fsPath,
+			}));
+
+			const selected = await vscode.window.showQuickPick(items, {
+				title: 'Select Session',
+				placeHolder: 'Choose a session to view its context',
+			});
+
+			if (selected) {
+				state.setSessionId(selected.label);
+				provider.refresh();
+				acpmProvider.refresh();
+				highlights.refreshAll();
+			}
+		}),
 		vscode.commands.registerCommand('contexty.hscmm.addSelectionToContextWithCurrent', async () => {
 			const editor = vscode.window.activeTextEditor;
 			if (editor && !editor.selection.isEmpty) {
@@ -427,12 +454,23 @@ export function activate(context: vscode.ExtensionContext) {
 						}
 					} catch {
 					}
-				}
-				provider.refresh();
-				highlights.refreshAll();
 			}
+			provider.refresh();
+			highlights.refreshAll();
+		}
 		)
 	);
+
+	context.subscriptions.push(sessionDiscovery.onDidChangeSessions(() => {
+		provider.refresh();
+		acpmProvider.refresh();
+		highlights.refreshAll();
+	}));
+
+	const activeSession = await sessionDiscovery.getActiveSession();
+	if (activeSession) {
+		state.setSessionId(activeSession.sessionId);
+	}
 
 	void state.refreshFromDisk().then(() => {
 		provider.refresh();
