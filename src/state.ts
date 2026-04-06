@@ -94,6 +94,7 @@ export interface PruningEntry {
 	turn: number;
 	reason: 'deduplication' | 'purge-errors';
 	tokenCount?: number;
+	error?: string;
 }
 
 export interface CompressionBlockView {
@@ -177,6 +178,10 @@ function deserializePruningEntry(value: unknown): PruningEntry | null {
 
 	if (typeof value.tokenCount === 'number' && Number.isFinite(value.tokenCount)) {
 		entry.tokenCount = value.tokenCount;
+	}
+
+	if (typeof value.error === 'string' && value.error.length > 0) {
+		entry.error = value.error;
 	}
 
 	return entry;

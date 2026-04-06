@@ -18,10 +18,20 @@
 	"activationEvents": [
 		"onStartupFinished",
 		"onView:contexty.hscmm.explorer",
-		"onView:contexty.acpm.explorer"
+		"onView:contexty.acpm.explorer",
+		"onView:contexty.pruningExplorer"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "contexty-sidebar",
+					"title": "Contexty",
+					"icon": "./resources/icons/check-light.svg"
+				}
+			]
+		},
 		"commands": [
 			{
 				"command": "contexty.hscmm.refresh",
@@ -32,6 +42,11 @@
 				"command": "contexty.dashboard.open",
 				"title": "Open Session Insight Dashboard",
 				"icon": "$(dashboard)"
+			},
+			{
+				"command": "contexty.pruning.settings",
+				"title": "Open DCP Settings",
+				"icon": "$(settings-gear)"
 			},
 			{
 				"command": "contexty.acpm.refresh",
@@ -67,6 +82,18 @@
 				"command": "contexty.hscmm.resetContext",
 				"title": "Reset Context",
 				"icon": "$(clear-all)"
+			},
+			{
+				"command": "contexty.pruning.restoreEntry",
+				"title": "Restore Pruned Entry"
+			},
+			{
+				"command": "contexty.pruning.restoreAll",
+				"title": "Restore All Pruned Entries"
+			},
+			{
+				"command": "contexty.pruning.decompressBlock",
+				"title": "Deactivate Compression Block"
 			},
 			{
 				"command": "contexty.session.select",
@@ -110,17 +137,21 @@
 			}
 		],
 		"views": {
-			"explorer": [
+			"contexty-sidebar": [
 				{
 					"id": "contexty.hscmm.explorer",
 					"name": "Context Explorer",
 					"dragAndDropController": true
 				},
-			{
-				"id": "contexty.acpm.explorer",
-				"name": "ACPM",
-				"dragAndDropController": true
-			}
+				{
+					"id": "contexty.pruningExplorer",
+					"name": "Pruning History"
+				},
+				{
+					"id": "contexty.acpm.explorer",
+					"name": "ACPM",
+					"dragAndDropController": true
+				}
 			]
 		},
 		"menus": {
@@ -130,19 +161,24 @@
 					"when": "view == contexty.hscmm.explorer",
 					"group": "navigation"
 				},
-			{
-				"command": "contexty.hscmm.resetContext",
-				"when": "view == contexty.hscmm.explorer",
-				"group": "navigation@2"
-			},
-			{
-				"command": "contexty.session.select",
-				"when": "view == contexty.hscmm.explorer",
-				"group": "navigation"
-			},
+				{
+					"command": "contexty.hscmm.resetContext",
+					"when": "view == contexty.hscmm.explorer",
+					"group": "navigation@2"
+				},
+				{
+					"command": "contexty.session.select",
+					"when": "view == contexty.hscmm.explorer",
+					"group": "navigation"
+				},
 				{
 					"command": "contexty.acpm.refresh",
 					"when": "view == contexty.acpm.explorer",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.pruning.restoreAll",
+					"when": "view == contexty.pruningExplorer",
 					"group": "navigation"
 				}
 			],
@@ -191,6 +227,16 @@
 					"command": "contexty.acpm.toggleTool",
 					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.preset",
 					"group": "navigation"
+				},
+				{
+					"command": "contexty.pruning.restoreEntry",
+					"when": "view == contexty.pruningExplorer && (viewItem == contexty.pruning.entry.deduplicated || viewItem == contexty.pruning.entry.error)",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.pruning.decompressBlock",
+					"when": "view == contexty.pruningExplorer && viewItem == contexty.pruning.block.active",
+					"group": "inline"
 				}
 			],
 			"editor/context": [

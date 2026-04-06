@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import { ContextExplorerProvider, ContextNode, ContextDragAndDropController } from './contextExplorer';
 import { ContextState, watchPruningState } from './state';
+import { PruningExplorerProvider } from './pruningExplorer';
 import { SelectionLensProvider } from './selectionLens';
 import { ContextHighlights } from './contextHighlights';
 import { SessionDiscovery } from './sessionDiscovery';
@@ -9,6 +10,8 @@ import { AcpmDragAndDropController, AcpmExplorerProvider, clonePreset, readPermi
 import { ALL_TOOL_CATEGORIES, type ACPMNode, type FolderAccess, type PermissionsFile, type Preset, type ToolCategory, type ToolPermission } from './acpmNodes';
 import { DashboardProvider } from './dashboard/dashboardProvider';
 import { MetricsState } from './dashboard/metricsState';
+import { openPruningSettingsPanel } from './ui/pruningSettings';
+import { registerPruningCommands } from './commands/pruning';
 
 function refreshAcpmView(provider: AcpmExplorerProvider): void {
 	provider.refresh();
@@ -35,6 +38,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const workspaceFolders = vscode.workspace.workspaceFolders;
 	const state = new ContextState(context.workspaceState, workspaceFolders);
 	const provider = new ContextExplorerProvider(state, context.subscriptions);
+	const workspaceRoot = workspaceFolders?.find((folder) => folder.uri.scheme === 'file')?.uri.fsPath;
+	const pruningProvider = new PruningExplorerProvider(workspaceRoot, () => state.getSessionId(), context.subscriptions);
 	const acpmProvider = new AcpmExplorerProvider(context.subscriptions, state);
 	const selectionLens = new SelectionLensProvider();
 	const highlights = new ContextHighlights(state);
@@ -42,7 +47,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	const metricsState = new MetricsState(context.subscriptions);
 	const dashboardProvider = new DashboardProvider();
 	let dashboardPanel: vscode.WebviewPanel | undefined;
-	const workspaceRoot = workspaceFolders?.find((folder) => folder.uri.scheme === 'file')?.uri.fsPath;
 
 	const syncPruningWatcher = async (): Promise<void> => {
 		const sessionId = state.getSessionId();
@@ -52,6 +56,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		await watchPruningState(workspaceRoot, sessionId, () => {
 			provider.refresh();
+			pruningProvider.refresh();
 		});
 	};
 
@@ -101,21 +106,29 @@ export async function activate(context: vscode.ExtensionContext) {
 		showCollapseAll: true,
 		dragAndDropController: new ContextDragAndDropController(state, provider)
 	});
+	const pruningTreeView = vscode.window.createTreeView('contexty.pruningExplorer', {
+		treeDataProvider: pruningProvider,
+		showCollapseAll: true
+	});
 	const acpmTreeView = vscode.window.createTreeView('contexty.acpm.explorer', {
 		treeDataProvider: acpmProvider,
 		showCollapseAll: true,
 		dragAndDropController: new AcpmDragAndDropController(acpmProvider)
 	});
-	context.subscriptions.push(treeView, acpmTreeView, highlights);
+	context.subscriptions.push(treeView, pruningTreeView, acpmTreeView, highlights);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('contexty.dashboard.open', () => {
 			openDashboard();
+		}),
+		vscode.commands.registerCommand('contexty.pruning.settings', () => {
+			void openPruningSettingsPanel(context);
 		}),
 		vscode.commands.registerCommand('contexty.dashboard.refresh', () => {
 			metricsState.setSessionId(metricsState.currentSessionId);
 			openDashboard();
 		})
 	);
+	registerPruningCommands(context, workspaceRoot, () => state.getSessionId());
 	metricsState.onMetricsUpdate = (snapshot) => {
 		dashboardProvider.updateMetrics(snapshot);
 		if (dashboardPanel) {
@@ -142,6 +155,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('contexty.hscmm.refresh', () => {
 			provider.refresh();
+			pruningProvider.refresh();
 			highlights.refreshAll();
 		}),
 		vscode.commands.registerCommand('contexty.acpm.refresh', () => {
@@ -440,9 +454,11 @@ export async function activate(context: vscode.ExtensionContext) {
 					state.setSessionId(sessionId);
 					metricsState.setSessionId(sessionId);
 					void syncPruningWatcher();
+					pruningProvider.refresh();
 				}
 
 			provider.refresh();
+			pruningProvider.refresh();
 			acpmProvider.refresh();
 			highlights.refreshAll();
 			updateSessionStatusBar();
@@ -565,6 +581,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			metricsState.setSessionId(session.sessionId);
 			void syncPruningWatcher();
 			provider.refresh();
+			pruningProvider.refresh();
 			acpmProvider.refresh();
 			highlights.refreshAll();
 			updateSessionStatusBar();
@@ -576,6 +593,7 @@ export async function activate(context: vscode.ExtensionContext) {
 						metricsState.setSessionId(undefined);
 						void syncPruningWatcher();
 						provider.refresh();
+						pruningProvider.refresh();
 						acpmProvider.refresh();
 						highlights.refreshAll();
 						updateSessionStatusBar();
@@ -587,6 +605,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					metricsState.setSessionId(state.getSessionId());
 					void syncPruningWatcher();
 					provider.refresh();
+					pruningProvider.refresh();
 					acpmProvider.refresh();
 					highlights.refreshAll();
 				}
@@ -598,12 +617,14 @@ export async function activate(context: vscode.ExtensionContext) {
 		state.setSessionId(activeSession.sessionId);
 		metricsState.setSessionId(activeSession.sessionId);
 		void syncPruningWatcher();
+		pruningProvider.refresh();
 	}
 	updateSessionStatusBar();
 	openDashboard();
 
 	void state.refreshFromDisk().then(() => {
 		provider.refresh();
+		pruningProvider.refresh();
 		highlights.refreshAll();
 		refreshAcpmView(acpmProvider);
 		updateSessionStatusBar();
