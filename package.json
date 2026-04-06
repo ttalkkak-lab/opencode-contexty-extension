@@ -18,7 +18,8 @@
 	"activationEvents": [
 		"onStartupFinished",
 		"onView:contexty.hscmm.explorer",
-		"onView:contexty.acpm.explorer"
+		"onView:contexty.acpm.explorer",
+		"onView:contexty.dashboard.insight"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
@@ -26,6 +27,11 @@
 			{
 				"command": "contexty.hscmm.refresh",
 				"title": "Refresh",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "contexty.dashboard.refresh",
+				"title": "Refresh Dashboard",
 				"icon": "$(refresh)"
 			},
 			{
@@ -115,6 +121,11 @@
 					"id": "contexty.acpm.explorer",
 					"name": "ACPM",
 					"dragAndDropController": true
+				},
+				{
+					"id": "contexty.dashboard.insight",
+					"name": "Session Insight",
+					"type": "webview"
 				}
 			]
 		},
@@ -135,11 +146,16 @@
 				"when": "view == contexty.hscmm.explorer",
 				"group": "navigation"
 			},
-			{
-				"command": "contexty.acpm.refresh",
-				"when": "view == contexty.acpm.explorer",
-				"group": "navigation"
-			}
+				{
+					"command": "contexty.acpm.refresh",
+					"when": "view == contexty.acpm.explorer",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.dashboard.refresh",
+					"when": "view == contexty.dashboard.insight",
+					"group": "navigation"
+				}
 			],
 			"view/item/context": [
 				{

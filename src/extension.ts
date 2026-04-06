@@ -7,6 +7,8 @@ import { ContextHighlights } from './contextHighlights';
 import { SessionDiscovery } from './sessionDiscovery';
 import { AcpmDragAndDropController, AcpmExplorerProvider, clonePreset, readPermissionsFile, writePermissionsFile } from './acpmExplorer';
 import { ALL_TOOL_CATEGORIES, type ACPMNode, type FolderAccess, type PermissionsFile, type Preset, type ToolCategory, type ToolPermission } from './acpmNodes';
+import { DashboardProvider } from './dashboard/dashboardProvider';
+import { MetricsState } from './dashboard/metricsState';
 
 function refreshAcpmView(provider: AcpmExplorerProvider): void {
 	provider.refresh();
@@ -37,6 +39,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const selectionLens = new SelectionLensProvider();
 	const highlights = new ContextHighlights(state);
 	const sessionDiscovery = new SessionDiscovery(context.subscriptions);
+	const metricsState = new MetricsState(context.subscriptions);
+	const dashboardProvider = new DashboardProvider();
 
 	const sessionStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	sessionStatusBar.command = 'contexty.session.select';
@@ -66,6 +70,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		dragAndDropController: new AcpmDragAndDropController(acpmProvider)
 	});
 	context.subscriptions.push(treeView, acpmTreeView, highlights);
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider('contexty.dashboard.insight', dashboardProvider)
+	);
+	metricsState.onMetricsUpdate = (snapshot) => dashboardProvider.updateMetrics(snapshot);
 
 	context.subscriptions.push(
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, selectionLens),
@@ -90,6 +98,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('contexty.acpm.refresh', () => {
 			refreshAcpmView(acpmProvider);
+		}),
+		vscode.commands.registerCommand('contexty.dashboard.refresh', () => {
+			metricsState.setSessionId(metricsState.currentSessionId);
 		}),
 		vscode.commands.registerCommand('contexty.acpm.createPreset', async () => {
 			const name = await vscode.window.showInputBox({
@@ -374,14 +385,15 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (selected === autoItem) {
 				sessionDiscovery.setAutoMode(true);
 				await sessionDiscovery.refresh();
-			} else {
-				sessionDiscovery.setAutoMode(false);
-				const sessionId = selected.sessionId;
-				if (!sessionId) {
-					return;
+				} else {
+					sessionDiscovery.setAutoMode(false);
+					const sessionId = selected.sessionId;
+					if (!sessionId) {
+						return;
+					}
+					state.setSessionId(sessionId);
+					metricsState.setSessionId(sessionId);
 				}
-				state.setSessionId(sessionId);
-			}
 
 			provider.refresh();
 			acpmProvider.refresh();
@@ -503,33 +515,38 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		sessionDiscovery.onDidChangeActiveSession((session) => {
 			state.setSessionId(session.sessionId);
+			metricsState.setSessionId(session.sessionId);
 			provider.refresh();
 			acpmProvider.refresh();
 			highlights.refreshAll();
 			updateSessionStatusBar();
 		}),
-		sessionDiscovery.onDidChangeSessions(() => {
-			if (sessionDiscovery.isAutoMode()) {
-				if (sessionDiscovery.getAllSessions().length === 0) {
-					state.setSessionId(undefined);
+			sessionDiscovery.onDidChangeSessions(() => {
+				if (sessionDiscovery.isAutoMode()) {
+					if (sessionDiscovery.getAllSessions().length === 0) {
+						state.setSessionId(undefined);
+						metricsState.setSessionId(undefined);
+						provider.refresh();
+						acpmProvider.refresh();
+						highlights.refreshAll();
+						updateSessionStatusBar();
+					}
+					metricsState.setSessionId(state.getSessionId());
+					return;
+				}
+				if (!sessionDiscovery.isAutoMode()) {
+					metricsState.setSessionId(state.getSessionId());
 					provider.refresh();
 					acpmProvider.refresh();
 					highlights.refreshAll();
-					updateSessionStatusBar();
 				}
-				return;
-			}
-			if (!sessionDiscovery.isAutoMode()) {
-				provider.refresh();
-				acpmProvider.refresh();
-				highlights.refreshAll();
-			}
-		})
-	);
+			})
+		);
 
 	const activeSession = await sessionDiscovery.getActiveSession();
 	if (activeSession) {
 		state.setSessionId(activeSession.sessionId);
+		metricsState.setSessionId(activeSession.sessionId);
 	}
 	updateSessionStatusBar();
 
