@@ -22,9 +22,15 @@ type PruningStateFile = {
 	prune?: {
 		tools?: PruningToolEntry[];
 		blocks?: PruningBlockEntry[];
+		messages?: {
+			blocksById?: unknown[];
+			[key: string]: unknown;
+		};
 		[key: string]: unknown;
 	};
 	blocks?: PruningBlockEntry[];
+	stats?: { totalPruneTokens?: number; [key: string]: unknown };
+	toolParameters?: unknown[];
 	[key: string]: unknown;
 };
 
@@ -32,7 +38,7 @@ function pruningStatePath(workspaceRoot: string, sessionId: string): string {
 	return path.join(workspaceRoot, '.contexty', 'sessions', sessionId, 'pruning-state.json');
 }
 
-async function readPruningState(filePath: string): Promise<PruningStateFile | null> {
+export async function readPruningState(filePath: string): Promise<PruningStateFile | null> {
 	try {
 		const raw = await fs.readFile(filePath, 'utf8');
 		return JSON.parse(raw) as PruningStateFile;
@@ -41,12 +47,12 @@ async function readPruningState(filePath: string): Promise<PruningStateFile | nu
 	}
 }
 
-async function writePruningState(filePath: string, state: PruningStateFile): Promise<void> {
+export async function writePruningState(filePath: string, state: PruningStateFile): Promise<void> {
 	await fs.mkdir(path.dirname(filePath), { recursive: true });
 	await fs.writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 }
 
-function getPruneContainer(state: PruningStateFile): Record<string, unknown> {
+export function getPruneContainer(state: PruningStateFile): Record<string, unknown> {
 	if (state.prune && typeof state.prune === 'object') {
 		return state.prune as Record<string, unknown>;
 	}
@@ -55,23 +61,43 @@ function getPruneContainer(state: PruningStateFile): Record<string, unknown> {
 	return state.prune;
 }
 
-function getTools(state: PruningStateFile): PruningToolEntry[] {
+export function getTools(state: PruningStateFile): PruningToolEntry[] {
 	const prune = getPruneContainer(state);
 	const tools = prune.tools;
 	return Array.isArray(tools) ? (tools as PruningToolEntry[]) : [];
 }
 
-function getBlocks(state: PruningStateFile): PruningBlockEntry[] {
+export function getBlocks(state: PruningStateFile): PruningBlockEntry[] {
 	const prune = getPruneContainer(state);
+	const messages = isRecord(prune.messages) ? prune.messages : null;
+
+	if (messages && Array.isArray(messages.blocksById)) {
+		const result: PruningBlockEntry[] = [];
+		for (const item of messages.blocksById) {
+			if (Array.isArray(item) && item.length === 2 && isRecord(item[1])) {
+				result.push(item[1] as PruningBlockEntry);
+			}
+		}
+		if (result.length > 0) {
+			return result;
+		}
+	}
+
 	const blocks = prune.blocks ?? state.blocks;
 	return Array.isArray(blocks) ? (blocks as PruningBlockEntry[]) : [];
 }
 
 function getToolCallId(entry: PruningToolEntry): string {
+	if (Array.isArray(entry) && typeof entry[0] === 'string') {
+		return entry[0];
+	}
 	return typeof entry.callID === 'string' ? entry.callID : typeof entry.callId === 'string' ? entry.callId : '';
 }
 
-function resolveToolEntry(nodeOrEntry: unknown): PruningToolEntry | undefined {
+export function resolveToolEntry(nodeOrEntry: unknown): PruningToolEntry | undefined {
+	if (Array.isArray(nodeOrEntry) && nodeOrEntry.length === 2 && typeof nodeOrEntry[0] === 'string') {
+		return { callId: nodeOrEntry[0] } as PruningToolEntry;
+	}
 	if (!isRecord(nodeOrEntry)) {
 		return undefined;
 	}
@@ -84,7 +110,10 @@ function resolveToolEntry(nodeOrEntry: unknown): PruningToolEntry | undefined {
 	return undefined;
 }
 
-function resolveBlockEntry(nodeOrBlock: unknown): PruningBlockEntry | undefined {
+export function resolveBlockEntry(nodeOrBlock: unknown): PruningBlockEntry | undefined {
+	if (Array.isArray(nodeOrBlock) && nodeOrBlock.length === 2 && typeof nodeOrBlock[0] === 'number') {
+		return nodeOrBlock[1] as PruningBlockEntry;
+	}
 	if (!isRecord(nodeOrBlock)) {
 		return undefined;
 	}
@@ -170,23 +199,42 @@ export function registerPruningCommands(context: vscode.ExtensionContext, worksp
 				return;
 			}
 
-			const blocks = getBlocks(state);
 			let changed = false;
-			const nextBlocks = blocks.map((item) => {
-				if (item.blockId !== blockId) {
-					return item;
+			const prune = getPruneContainer(state);
+			const messages = isRecord(prune.messages) ? prune.messages : null;
+			if (messages && Array.isArray(messages.blocksById)) {
+				for (const item of messages.blocksById) {
+					if (Array.isArray(item) && item.length === 2 && isRecord(item[1])) {
+						const entry = item[1] as PruningBlockEntry;
+						if (entry.blockId === blockId && entry.active) {
+							entry.active = false;
+							changed = true;
+							break;
+						}
+					}
 				}
-				changed = true;
-				return { ...item, active: false };
-			});
+			}
+
+			if (!changed) {
+				const blocks = getBlocks(state);
+				for (const item of blocks) {
+					if (item.blockId === blockId && item.active) {
+						item.active = false;
+						changed = true;
+						break;
+					}
+				}
+			}
 
 			if (!changed) {
 				return;
 			}
 
-			getPruneContainer(state).blocks = nextBlocks;
+			if (Array.isArray(prune.blocks)) {
+				prune.blocks = getBlocks(state);
+			}
 			if (Array.isArray(state.blocks)) {
-				state.blocks = nextBlocks;
+				state.blocks = getBlocks(state);
 			}
 			await writePruningState(filePath, state);
 			await refreshPruningView();
