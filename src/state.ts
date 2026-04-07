@@ -1,6 +1,16 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import {
+	deserializePruningSessionData,
+	type CompressionBlockView,
+	type PruningEntry,
+	type PruningSessionData,
+	type SerializedPruningSessionData,
+} from './state.pruning.js';
+
+export { deserializePruningSessionData } from './state.pruning.js';
+export type { CompressionBlockView, PruningEntry, PruningSessionData } from './state.pruning.js';
 
 type ToolPart = {
 	id: string;
@@ -88,161 +98,8 @@ function isFullFilePart(part: ToolPart): boolean {
 	return part.state.metadata?.truncated === false;
 }
 
-export interface PruningEntry {
-	callId: string;
-	tool: string;
-	turn: number;
-	reason: 'deduplication' | 'purge-errors';
-	tokenCount?: number;
-	error?: string;
-}
-
-export interface CompressionBlockView {
-	blockId: number;
-	topic: string;
-	startId: string;
-	endId: string;
-	compressedTokens: number;
-	summaryTokens: number;
-	active: boolean;
-	mode: string;
-	createdAt: number;
-	summary: string;
-}
-
-export interface PruningSessionData {
-	sessionId: string;
-	entries: PruningEntry[];
-	blocks: CompressionBlockView[];
-	totalPrunedTokens: number;
-	totalSummaryTokens: number;
-}
-
-type SerializedPruningSessionData = {
-	sessionId?: unknown;
-	entries?: unknown;
-	blocks?: unknown;
-	totalPrunedTokens?: unknown;
-	totalSummaryTokens?: unknown;
-	prune?: {
-		entries?: unknown;
-		blocks?: unknown;
-		totalPrunedTokens?: unknown;
-		totalSummaryTokens?: unknown;
-		[key: string]: unknown;
-	};
-	[key: string]: unknown;
-};
-
 const pruningWatchers = new Map<string, vscode.FileSystemWatcher>();
 const pruningWatcherTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function toString(value: unknown): string {
-	return typeof value === 'string' ? value : '';
-}
-
-function toNumber(value: unknown): number {
-	return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function toBoolean(value: unknown): boolean {
-	return typeof value === 'boolean' ? value : false;
-}
-
-function normalizeReason(value: unknown): PruningEntry['reason'] {
-	return value === 'purge-errors' ? 'purge-errors' : 'deduplication';
-}
-
-function deserializePruningEntry(value: unknown): PruningEntry | null {
-	if (!isRecord(value)) {
-		return null;
-	}
-
-	const callId = toString(value.callId ?? value.callID);
-	const tool = toString(value.tool);
-	const turn = toNumber(value.turn);
-	if (!callId || !tool || turn < 0) {
-		return null;
-	}
-
-	const entry: PruningEntry = {
-		callId,
-		tool,
-		turn,
-		reason: normalizeReason(value.reason),
-	};
-
-	if (typeof value.tokenCount === 'number' && Number.isFinite(value.tokenCount)) {
-		entry.tokenCount = value.tokenCount;
-	}
-
-	if (typeof value.error === 'string' && value.error.length > 0) {
-		entry.error = value.error;
-	}
-
-	return entry;
-}
-
-function deserializeCompressionBlockView(value: unknown): CompressionBlockView | null {
-	if (!isRecord(value)) {
-		return null;
-	}
-
-	const blockId = toNumber(value.blockId);
-	const topic = toString(value.topic);
-	const startId = toString(value.startId);
-	const endId = toString(value.endId);
-	if (blockId < 0 || !topic || !startId || !endId) {
-		return null;
-	}
-
-	return {
-		blockId,
-		topic,
-		startId,
-		endId,
-		compressedTokens: toNumber(value.compressedTokens),
-		summaryTokens: toNumber(value.summaryTokens),
-		active: toBoolean(value.active),
-		mode: toString(value.mode) || 'range',
-		createdAt: toNumber(value.createdAt),
-		summary: toString(value.summary),
-	};
-}
-
-function deserializePruningSessionData(raw: SerializedPruningSessionData): PruningSessionData | null {
-	const source = isRecord(raw.prune) ? raw.prune : raw;
-	const sessionId = toString(source.sessionId ?? raw.sessionId);
-	if (!sessionId) {
-		return null;
-	}
-
-	const entries = Array.isArray(source.entries)
-		? source.entries.map((entry) => deserializePruningEntry(entry)).filter((entry): entry is PruningEntry => entry !== null)
-		: [];
-	const blocks = Array.isArray(source.blocks)
-		? source.blocks.map((block) => deserializeCompressionBlockView(block)).filter((block): block is CompressionBlockView => block !== null)
-		: [];
-
-	const totalPrunedTokens = typeof source.totalPrunedTokens === 'number'
-		? source.totalPrunedTokens
-		: entries.reduce((sum, entry) => sum + (entry.tokenCount ?? 0), 0);
-	const totalSummaryTokens = typeof source.totalSummaryTokens === 'number'
-		? source.totalSummaryTokens
-		: blocks.reduce((sum, block) => sum + block.summaryTokens, 0);
-
-	return {
-		sessionId,
-		entries,
-		blocks,
-		totalPrunedTokens,
-		totalSummaryTokens,
-	};
-}
 
 async function readJSON<T>(filePath: string): Promise<T | null> {
 	try {
