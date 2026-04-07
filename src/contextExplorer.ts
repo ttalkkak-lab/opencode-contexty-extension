@@ -183,6 +183,9 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 		const totalTokens = this.state.getTotalTokens();
 
 		if (!node) {
+			if (!this.state.getSessionId()) {
+				return [{ type: 'root' as const, uri: vscode.Uri.parse(''), label: 'No active session', tooltip: 'Select a session to view context' }];
+			}
 			await this.state.refreshFromDisk();
 			const roots = this.state.getRootsWithParts();
 			if (roots.length === 1) {

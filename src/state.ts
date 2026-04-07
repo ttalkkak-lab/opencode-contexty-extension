@@ -88,6 +88,231 @@ function isFullFilePart(part: ToolPart): boolean {
 	return part.state.metadata?.truncated === false;
 }
 
+export interface PruningEntry {
+	callId: string;
+	tool: string;
+	turn: number;
+	reason: 'deduplication' | 'purge-errors';
+	tokenCount?: number;
+	error?: string;
+}
+
+export interface CompressionBlockView {
+	blockId: number;
+	topic: string;
+	startId: string;
+	endId: string;
+	compressedTokens: number;
+	summaryTokens: number;
+	active: boolean;
+	mode: string;
+	createdAt: number;
+	summary: string;
+}
+
+export interface PruningSessionData {
+	sessionId: string;
+	entries: PruningEntry[];
+	blocks: CompressionBlockView[];
+	totalPrunedTokens: number;
+	totalSummaryTokens: number;
+}
+
+type SerializedPruningSessionData = {
+	sessionId?: unknown;
+	entries?: unknown;
+	blocks?: unknown;
+	totalPrunedTokens?: unknown;
+	totalSummaryTokens?: unknown;
+	prune?: {
+		entries?: unknown;
+		blocks?: unknown;
+		totalPrunedTokens?: unknown;
+		totalSummaryTokens?: unknown;
+		[key: string]: unknown;
+	};
+	[key: string]: unknown;
+};
+
+const pruningWatchers = new Map<string, vscode.FileSystemWatcher>();
+const pruningWatcherTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function toString(value: unknown): string {
+	return typeof value === 'string' ? value : '';
+}
+
+function toNumber(value: unknown): number {
+	return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function toBoolean(value: unknown): boolean {
+	return typeof value === 'boolean' ? value : false;
+}
+
+function normalizeReason(value: unknown): PruningEntry['reason'] {
+	return value === 'purge-errors' ? 'purge-errors' : 'deduplication';
+}
+
+function deserializePruningEntry(value: unknown): PruningEntry | null {
+	if (!isRecord(value)) {
+		return null;
+	}
+
+	const callId = toString(value.callId ?? value.callID);
+	const tool = toString(value.tool);
+	const turn = toNumber(value.turn);
+	if (!callId || !tool || turn < 0) {
+		return null;
+	}
+
+	const entry: PruningEntry = {
+		callId,
+		tool,
+		turn,
+		reason: normalizeReason(value.reason),
+	};
+
+	if (typeof value.tokenCount === 'number' && Number.isFinite(value.tokenCount)) {
+		entry.tokenCount = value.tokenCount;
+	}
+
+	if (typeof value.error === 'string' && value.error.length > 0) {
+		entry.error = value.error;
+	}
+
+	return entry;
+}
+
+function deserializeCompressionBlockView(value: unknown): CompressionBlockView | null {
+	if (!isRecord(value)) {
+		return null;
+	}
+
+	const blockId = toNumber(value.blockId);
+	const topic = toString(value.topic);
+	const startId = toString(value.startId);
+	const endId = toString(value.endId);
+	if (blockId < 0 || !topic || !startId || !endId) {
+		return null;
+	}
+
+	return {
+		blockId,
+		topic,
+		startId,
+		endId,
+		compressedTokens: toNumber(value.compressedTokens),
+		summaryTokens: toNumber(value.summaryTokens),
+		active: toBoolean(value.active),
+		mode: toString(value.mode) || 'range',
+		createdAt: toNumber(value.createdAt),
+		summary: toString(value.summary),
+	};
+}
+
+function deserializePruningSessionData(raw: SerializedPruningSessionData): PruningSessionData | null {
+	const source = isRecord(raw.prune) ? raw.prune : raw;
+	const sessionId = toString(source.sessionId ?? raw.sessionId);
+	if (!sessionId) {
+		return null;
+	}
+
+	const entries = Array.isArray(source.entries)
+		? source.entries.map((entry) => deserializePruningEntry(entry)).filter((entry): entry is PruningEntry => entry !== null)
+		: [];
+	const blocks = Array.isArray(source.blocks)
+		? source.blocks.map((block) => deserializeCompressionBlockView(block)).filter((block): block is CompressionBlockView => block !== null)
+		: [];
+
+	const totalPrunedTokens = typeof source.totalPrunedTokens === 'number'
+		? source.totalPrunedTokens
+		: entries.reduce((sum, entry) => sum + (entry.tokenCount ?? 0), 0);
+	const totalSummaryTokens = typeof source.totalSummaryTokens === 'number'
+		? source.totalSummaryTokens
+		: blocks.reduce((sum, block) => sum + block.summaryTokens, 0);
+
+	return {
+		sessionId,
+		entries,
+		blocks,
+		totalPrunedTokens,
+		totalSummaryTokens,
+	};
+}
+
+async function readJSON<T>(filePath: string): Promise<T | null> {
+	try {
+		const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+		return JSON.parse(Buffer.from(raw).toString('utf8')) as T;
+	} catch {
+		return null;
+	}
+}
+
+function pruningStatePath(workspaceRoot: string, sessionId: string): string {
+	return path.join(workspaceRoot, '.contexty', 'sessions', sessionId, 'pruning-state.json');
+}
+
+function pruningStatePattern(workspaceRoot: string, sessionId: string): vscode.RelativePattern {
+	return new vscode.RelativePattern(vscode.Uri.file(workspaceRoot), path.join('.contexty', 'sessions', sessionId, 'pruning-state.json'));
+}
+
+export async function loadPruningHistory(workspaceRoot: string, sessionId: string): Promise<PruningSessionData | null> {
+	const raw = await readJSON<SerializedPruningSessionData>(pruningStatePath(workspaceRoot, sessionId));
+	if (!raw) {
+		return null;
+	}
+
+	return deserializePruningSessionData(raw);
+}
+
+export function getActivePruningEntries(data: PruningSessionData): PruningEntry[] {
+	return data.entries.filter((entry): entry is PruningEntry => !!entry);
+}
+
+export function getCompressionBlocks(data: PruningSessionData): CompressionBlockView[] {
+	return data.blocks;
+}
+
+export async function watchPruningState(
+	workspaceRoot: string,
+	sessionId: string,
+	onChange: (data: PruningSessionData) => void
+): Promise<void> {
+	const key = pruningStatePath(workspaceRoot, sessionId);
+	pruningWatchers.get(key)?.dispose();
+	const watcher = vscode.workspace.createFileSystemWatcher(pruningStatePattern(workspaceRoot, sessionId));
+	pruningWatchers.set(key, watcher);
+
+	const refresh = async () => {
+		const data = await loadPruningHistory(workspaceRoot, sessionId);
+		if (data) {
+			onChange(data);
+		}
+	};
+
+	const queueRefresh = () => {
+		const existing = pruningWatcherTimers.get(key);
+		if (existing) {
+			clearTimeout(existing);
+		}
+		const timer = setTimeout(() => {
+			pruningWatcherTimers.delete(key);
+			void refresh();
+		}, 150);
+		pruningWatcherTimers.set(key, timer);
+	};
+
+	watcher.onDidCreate(queueRefresh);
+	watcher.onDidChange(queueRefresh);
+	watcher.onDidDelete(queueRefresh);
+	await refresh();
+}
+
 async function formatFileWithNumbers(uri: vscode.Uri): Promise<{
 	output: string;
 	preview: string;
@@ -133,6 +358,7 @@ export class ContextState {
 		banUri: vscode.Uri;
 	}>;
 	private readonly sessionId: string;
+	private currentSessionId: string | undefined;
 
 	constructor(
 		private readonly memento: vscode.Memento,
@@ -143,19 +369,18 @@ export class ContextState {
 			.filter((wf) => wf.uri.scheme === 'file')
 			.map((wf) => {
 				const rootFsPathLower = wf.uri.fsPath.toLowerCase();
-				const contextDirUri = vscode.Uri.joinPath(wf.uri, '.contexty');
+				const contextDirUri = this.getContextDirUri(wf.uri);
 				return {
 					rootUri: wf.uri,
 					rootFsPathLower,
 					contextDirUri,
-					partsUri: vscode.Uri.joinPath(contextDirUri, 'tool-parts.json'),
-					banUri: vscode.Uri.joinPath(contextDirUri, 'tool-parts.blacklist.json')
+					partsUri: this.getPartsUri(wf.uri),
+					banUri: this.getBanUri(wf.uri)
 				};
 			});
 		this.load();
 		void this.ensureGitignoreForRoots();
-		void this.writeCheckedFile();
-		void this.refreshFromDisk();
+		void this.refreshFromDisk().then(() => this.writeCheckedFile());
 	}
 
 	isChecked(uri: vscode.Uri): boolean {
@@ -180,6 +405,10 @@ export class ContextState {
 			return [];
 		}
 		return parts.map((part) => part.id);
+	}
+
+	setSessionId(sessionId: string | undefined): void {
+		this.currentSessionId = sessionId;
 	}
 
 	getRootsWithParts(): Array<{ uri: vscode.Uri; label: string }> {
@@ -499,17 +728,20 @@ export class ContextState {
 		if (!root) {
 			return;
 		}
+		const contextDirUri = this.getContextDirUri(root.rootUri);
+		const partsUri = this.getPartsUri(root.rootUri);
 
 		const { output, preview, lineCount } = await formatFileWithNumbers(uri);
 		if (lineCount === 0) {
 			return;
 		}
+		const effectiveSessionId = this.getEffectiveSessionId();
 
 		const timestamp = Date.now();
 		const title = path.relative(root.rootUri.fsPath, uri.fsPath) || uri.fsPath;
 		const part: ToolPart = {
 			id: generateCustomId('prt'),
-			sessionID: this.sessionId,
+			sessionID: effectiveSessionId,
 			messageID: generateCustomId('msg'),
 			type: 'tool',
 			callID: generateCustomId('call'),
@@ -526,7 +758,7 @@ export class ContextState {
 
 		let existingParts: ToolPart[] = [];
 		try {
-			const raw = await vscode.workspace.fs.readFile(root.partsUri);
+			const raw = await vscode.workspace.fs.readFile(partsUri);
 			const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as { parts?: ToolPart[] };
 			if (Array.isArray(parsed.parts)) {
 				existingParts = parsed.parts;
@@ -537,11 +769,11 @@ export class ContextState {
 		existingParts.push(part);
 		const partsContents = Buffer.from(JSON.stringify({ parts: existingParts }, null, 2), 'utf8');
 		try {
-			await vscode.workspace.fs.createDirectory(root.contextDirUri);
+			await vscode.workspace.fs.createDirectory(contextDirUri);
 		} catch {
 			// ignore
 		}
-		await vscode.workspace.fs.writeFile(root.partsUri, partsContents);
+		await vscode.workspace.fs.writeFile(partsUri, partsContents);
 
 		await this.syncCheckedFromExternalParts();
 	}
@@ -561,6 +793,9 @@ export class ContextState {
 		if (!root) {
 			return;
 		}
+		const contextDirUri = this.getContextDirUri(root.rootUri);
+		const partsUri = this.getPartsUri(root.rootUri);
+		const effectiveSessionId = this.getEffectiveSessionId();
 
 		const startLine = selection.start.line;
 		const fullEnd = document.lineAt(document.lineCount - 1).range.end;
@@ -593,7 +828,7 @@ export class ContextState {
 		const title = path.relative(root.rootUri.fsPath, document.uri.fsPath) || document.uri.fsPath;
 		const part: ToolPart = {
 			id: generateCustomId('prt'),
-			sessionID: this.sessionId,
+			sessionID: effectiveSessionId,
 			messageID: generateCustomId('msg'),
 			type: 'tool',
 			callID: generateCustomId('call'),
@@ -610,7 +845,7 @@ export class ContextState {
 
 		let existingParts: ToolPart[] = [];
 		try {
-			const raw = await vscode.workspace.fs.readFile(root.partsUri);
+			const raw = await vscode.workspace.fs.readFile(partsUri);
 			const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as { parts?: ToolPart[] };
 			if (Array.isArray(parsed.parts)) {
 				existingParts = parsed.parts;
@@ -621,11 +856,11 @@ export class ContextState {
 		existingParts.push(part);
 		const partsContents = Buffer.from(JSON.stringify({ parts: existingParts }, null, 2), 'utf8');
 		try {
-			await vscode.workspace.fs.createDirectory(root.contextDirUri);
+			await vscode.workspace.fs.createDirectory(contextDirUri);
 		} catch {
 			// ignore
 		}
-		await vscode.workspace.fs.writeFile(root.partsUri, partsContents);
+		await vscode.workspace.fs.writeFile(partsUri, partsContents);
 
 		await this.syncCheckedFromExternalParts();
 	}
@@ -646,7 +881,10 @@ export class ContextState {
 		const banned = [...this.banned];
 		banned.sort((a, b) => (a || "").localeCompare(b || ""));
 
-		for (const { rootFsPathLower, contextDirUri, partsUri, banUri } of this.roots) {
+		for (const { rootUri, rootFsPathLower } of this.roots) {
+			const contextDirUri = this.getContextDirUri(rootUri);
+			const partsUri = this.getPartsUri(rootUri);
+			const banUri = this.getBanUri(rootUri);
 			try {
 				await vscode.workspace.fs.createDirectory(contextDirUri);
 			} catch {
@@ -733,7 +971,10 @@ export class ContextState {
 		this.banned = new Set();
 		this.partsByFile = new Map();
 
-		const toolPartUris = await vscode.workspace.findFiles('**/.contexty/tool-parts.json', '**/node_modules/**');
+		const pattern = this.currentSessionId
+			? `**/.contexty/sessions/${this.currentSessionId}/tool-parts.json`
+			: '**/.contexty/tool-parts.json';
+		const toolPartUris = await vscode.workspace.findFiles(pattern, '**/node_modules/**');
 		for (const partsUri of toolPartUris) {
 			const contextDirUri = vscode.Uri.file(path.dirname(partsUri.fsPath));
 			const banUri = vscode.Uri.joinPath(contextDirUri, 'tool-parts.blacklist.json');
@@ -804,6 +1045,28 @@ export class ContextState {
 				this.partsByFile.set(key, list);
 			}
 		}
+	}
+
+	private getEffectiveSessionId(): string {
+		return this.currentSessionId ?? this.sessionId;
+	}
+
+	getSessionId(): string | undefined {
+		return this.getEffectiveSessionId();
+	}
+
+	private getContextDirUri(rootUri: vscode.Uri): vscode.Uri {
+		return this.currentSessionId
+			? vscode.Uri.joinPath(rootUri, '.contexty', 'sessions', this.currentSessionId)
+			: vscode.Uri.joinPath(rootUri, '.contexty');
+	}
+
+	private getPartsUri(rootUri: vscode.Uri): vscode.Uri {
+		return vscode.Uri.joinPath(this.getContextDirUri(rootUri), 'tool-parts.json');
+	}
+
+	private getBanUri(rootUri: vscode.Uri): vscode.Uri {
+		return vscode.Uri.joinPath(this.getContextDirUri(rootUri), 'tool-parts.blacklist.json');
 	}
 
 	private loadOrCreateSessionId(): string {

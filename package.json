@@ -17,13 +17,39 @@
 	],
 	"activationEvents": [
 		"onStartupFinished",
-		"onView:contexty.hscmm.explorer"
+		"onView:contexty.hscmm.explorer",
+		"onView:contexty.acpm.explorer",
+		"onView:contexty.pruningExplorer"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "contexty-sidebar",
+					"title": "Contexty",
+					"icon": "./resources/icons/check-light.svg"
+				}
+			]
+		},
 		"commands": [
 			{
 				"command": "contexty.hscmm.refresh",
+				"title": "Refresh",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "contexty.dashboard.open",
+				"title": "Open Session Insight Dashboard",
+				"icon": "$(dashboard)"
+			},
+			{
+				"command": "contexty.pruning.settings",
+				"title": "Open DCP Settings",
+				"icon": "$(settings-gear)"
+			},
+			{
+				"command": "contexty.acpm.refresh",
 				"title": "Refresh",
 				"icon": "$(refresh)"
 			},
@@ -56,13 +82,74 @@
 				"command": "contexty.hscmm.resetContext",
 				"title": "Reset Context",
 				"icon": "$(clear-all)"
+			},
+			{
+				"command": "contexty.pruning.restoreEntry",
+				"title": "Restore Pruned Entry"
+			},
+			{
+				"command": "contexty.pruning.restoreAll",
+				"title": "Restore All Pruned Entries"
+			},
+			{
+				"command": "contexty.pruning.decompressBlock",
+				"title": "Deactivate Compression Block"
+			},
+			{
+				"command": "contexty.session.select",
+				"title": "Contexty: Select Session",
+				"category": "Contexty"
+			},
+			{
+				"command": "contexty.acpm.createPreset",
+				"title": "Create ACPM Preset",
+				"icon": "$(add)"
+			},
+			{
+				"command": "contexty.acpm.deletePreset",
+				"title": "Delete ACPM Preset",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "contexty.acpm.switchPreset",
+				"title": "Switch ACPM Preset",
+				"icon": "$(arrow-switch)"
+			},
+			{
+				"command": "contexty.acpm.addFolderPermission",
+				"title": "Add Folder Permission",
+				"icon": "$(folder-add)"
+			},
+			{
+				"command": "contexty.acpm.removeFolderPermission",
+				"title": "Remove Folder Permission",
+				"icon": "$(folder-library)"
+			},
+			{
+				"command": "contexty.acpm.changeFolderAccess",
+				"title": "Change Access Level",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "contexty.acpm.toggleTool",
+				"title": "Toggle Tool Category",
+				"icon": "$(tools)"
 			}
 		],
 		"views": {
-			"explorer": [
+			"contexty-sidebar": [
 				{
 					"id": "contexty.hscmm.explorer",
 					"name": "Context Explorer",
+					"dragAndDropController": true
+				},
+				{
+					"id": "contexty.pruningExplorer",
+					"name": "Pruning History"
+				},
+				{
+					"id": "contexty.acpm.explorer",
+					"name": "ACPM",
 					"dragAndDropController": true
 				}
 			]
@@ -78,6 +165,21 @@
 					"command": "contexty.hscmm.resetContext",
 					"when": "view == contexty.hscmm.explorer",
 					"group": "navigation@2"
+				},
+				{
+					"command": "contexty.session.select",
+					"when": "view == contexty.hscmm.explorer",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.acpm.refresh",
+					"when": "view == contexty.acpm.explorer",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.pruning.restoreAll",
+					"when": "view == contexty.pruningExplorer",
+					"group": "navigation"
 				}
 			],
 			"view/item/context": [
@@ -89,6 +191,51 @@
 				{
 					"command": "contexty.hscmm.removeFileContext",
 					"when": "view == contexty.hscmm.explorer && (viewItem == contexty.hscmm.file || viewItem == contexty.hscmm.dir)",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.acpm.createPreset",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.root",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.acpm.switchPreset",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.preset",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.acpm.deletePreset",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.preset",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.acpm.addFolderPermission",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.preset",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.acpm.removeFolderPermission",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.folder-perm",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.acpm.changeFolderAccess",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.folder-perm",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.acpm.toggleTool",
+					"when": "view == contexty.acpm.explorer && viewItem == contexty.acpm.preset",
+					"group": "navigation"
+				},
+				{
+					"command": "contexty.pruning.restoreEntry",
+					"when": "view == contexty.pruningExplorer && (viewItem == contexty.pruning.entry.deduplicated || viewItem == contexty.pruning.entry.error)",
+					"group": "inline"
+				},
+				{
+					"command": "contexty.pruning.decompressBlock",
+					"when": "view == contexty.pruningExplorer && viewItem == contexty.pruning.block.active",
 					"group": "inline"
 				}
 			],
