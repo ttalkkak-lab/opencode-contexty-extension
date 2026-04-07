@@ -10,6 +10,8 @@ export type ContextNode = {
 	partId?: string;
 	tooltip?: string;
 	partTruncated?: boolean;
+	tokens?: number;
+	percentage?: number;
 };
 
 export class ContextDragAndDropController implements vscode.TreeDragAndDropController<ContextNode> {
@@ -163,7 +165,12 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 			};
 		}
 
-		// Checkbox is the primary UI signal; keep labels clean.
+		if (node.percentage !== undefined && node.tokens !== undefined && node.type !== 'part') {
+			const pct = node.percentage;
+			const tok = node.tokens >= 1000 ? `${(node.tokens / 1000).toFixed(1)}k` : `${node.tokens}`;
+			item.description = `${pct.toFixed(1)}%  ~${tok}`;
+			item.tooltip = `${node.label}\n~${node.tokens.toLocaleString()} tokens • ${pct.toFixed(1)}% of context`;
+		}
 
 		return item;
 	}
@@ -173,21 +180,34 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 			return [];
 		}
 
+		const totalTokens = this.state.getTotalTokens();
+
 		if (!node) {
 			await this.state.refreshFromDisk();
 			const roots = this.state.getRootsWithParts();
 			if (roots.length === 1) {
 				const children = this.state.getChildrenForPath(roots[0].uri);
 				return [
-					...children.dirs.map((dir) => ({ type: 'dir' as const, uri: dir.uri, label: dir.label })),
-					...children.files.map((file) => ({ type: 'file' as const, uri: file.uri, label: file.label }))
+					...children.dirs.map((dir) => {
+						const tokens = this.state.getNodeTokens(dir.uri, 'dir');
+						return { type: 'dir' as const, uri: dir.uri, label: dir.label, tokens, percentage: totalTokens > 0 ? (tokens / totalTokens) * 100 : 0 };
+					}),
+					...children.files.map((file) => {
+						const tokens = this.state.getNodeTokens(file.uri, 'file');
+						return { type: 'file' as const, uri: file.uri, label: file.label, tokens, percentage: totalTokens > 0 ? (tokens / totalTokens) * 100 : 0 };
+					})
 				];
 			}
-			return roots.map((root) => ({
-				type: 'root' as const,
-				uri: root.uri,
-				label: root.label
-			}));
+			return roots.map((root) => {
+				const tokens = this.state.getNodeTokens(root.uri, 'root');
+				return {
+					type: 'root' as const,
+					uri: root.uri,
+					label: root.label,
+					tokens,
+					percentage: totalTokens > 0 ? (tokens / totalTokens) * 100 : 0
+				};
+			});
 		}
 
 		if (node.type === 'file') {
@@ -204,8 +224,14 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 
 		const children = this.state.getChildrenForPath(node.uri);
 		return [
-			...children.dirs.map((dir) => ({ type: 'dir' as const, uri: dir.uri, label: dir.label })),
-			...children.files.map((file) => ({ type: 'file' as const, uri: file.uri, label: file.label }))
+			...children.dirs.map((dir) => {
+				const tokens = this.state.getNodeTokens(dir.uri, 'dir');
+				return { type: 'dir' as const, uri: dir.uri, label: dir.label, tokens, percentage: totalTokens > 0 ? (tokens / totalTokens) * 100 : 0 };
+			}),
+			...children.files.map((file) => {
+				const tokens = this.state.getNodeTokens(file.uri, 'file');
+				return { type: 'file' as const, uri: file.uri, label: file.label, tokens, percentage: totalTokens > 0 ? (tokens / totalTokens) * 100 : 0 };
+			})
 		];
 	}
 }

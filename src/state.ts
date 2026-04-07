@@ -113,6 +113,14 @@ async function formatFileWithNumbers(uri: vscode.Uri): Promise<{
 	}
 }
 
+export type FileContextStat = {
+	uri: vscode.Uri;
+	label: string;
+	tokens: number;
+	percentage: number;
+	partCount: number;
+};
+
 export class ContextState {
 	private checked = new Map<string, string>();
 	private banned = new Set<string>();
@@ -234,6 +242,90 @@ export class ContextState {
 			.map(([filePath, label]) => ({ uri: vscode.Uri.file(filePath), label }))
 			.sort((a, b) => (a.label || "").localeCompare(b.label || ""));
 		return { dirs: dirEntries, files: fileEntries };
+	}
+
+	private getFileTokens(uri: vscode.Uri): number {
+		const key = asKey(uri);
+		const parts = this.partsByFile.get(key);
+		if (!parts) {
+			return 0;
+		}
+		let total = 0;
+		for (const part of parts) {
+			const output = typeof part.state.output === 'string' ? part.state.output : '';
+			total += Math.ceil(output.length / 4);
+		}
+		return total;
+	}
+
+	private getDirTokens(dirUri: vscode.Uri): number {
+		const dirPath = dirUri.fsPath.toLowerCase();
+		let total = 0;
+		for (const [key, parts] of this.partsByFile.entries()) {
+			let fileUri: vscode.Uri;
+			try {
+				fileUri = vscode.Uri.parse(key);
+			} catch {
+				continue;
+			}
+			if (!fileUri.fsPath.toLowerCase().startsWith(dirPath + path.sep)) {
+				continue;
+			}
+			for (const part of parts) {
+				const output = typeof part.state.output === 'string' ? part.state.output : '';
+				total += Math.ceil(output.length / 4);
+			}
+		}
+		return total;
+	}
+
+	getTotalTokens(): number {
+		let total = 0;
+		for (const parts of this.partsByFile.values()) {
+			for (const part of parts) {
+				const output = typeof part.state.output === 'string' ? part.state.output : '';
+				total += Math.ceil(output.length / 4);
+			}
+		}
+		return total;
+	}
+
+	getNodeTokens(uri: vscode.Uri, nodeType: 'file' | 'dir' | 'root'): number {
+		if (nodeType === 'file') {
+			return this.getFileTokens(uri);
+		}
+		if (nodeType === 'dir' || nodeType === 'root') {
+			return this.getDirTokens(uri);
+		}
+		return 0;
+	}
+
+	getContextStats(): FileContextStat[] {
+		const totalTokens = this.getTotalTokens();
+		const stats: FileContextStat[] = [];
+		for (const [key, parts] of this.partsByFile.entries()) {
+			let fileUri: vscode.Uri;
+			try {
+				fileUri = vscode.Uri.parse(key);
+			} catch {
+				continue;
+			}
+			let tokens = 0;
+			for (const part of parts) {
+				const output = typeof part.state.output === 'string' ? part.state.output : '';
+				tokens += Math.ceil(output.length / 4);
+			}
+			const relPath = vscode.workspace.asRelativePath(fileUri, false);
+			stats.push({
+				uri: fileUri,
+				label: relPath,
+				tokens,
+				percentage: totalTokens > 0 ? (tokens / totalTokens) * 100 : 0,
+				partCount: parts.length,
+			});
+		}
+		stats.sort((a, b) => b.tokens - a.tokens);
+		return stats;
 	}
 
 	private async ensureGitignoreForRoots(): Promise<void> {
