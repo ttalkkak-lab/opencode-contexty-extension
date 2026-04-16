@@ -12,6 +12,7 @@ export interface CompressionBlockView {
 	topic: string;
 	startId: string;
 	endId: string;
+	effectiveToolIds: string[];
 	compressedTokens: number;
 	summaryTokens: number;
 	active: boolean;
@@ -26,6 +27,9 @@ export interface PruningSessionData {
 	blocks: CompressionBlockView[];
 	totalPrunedTokens: number;
 	totalSummaryTokens: number;
+	prune?: {
+		toolIdList?: string[];
+	};
 }
 
 export type SerializedPruningSessionData = {
@@ -34,6 +38,7 @@ export type SerializedPruningSessionData = {
 	blocks?: unknown;
 	totalPrunedTokens?: unknown;
 	totalSummaryTokens?: unknown;
+	toolIdList?: unknown[];
 	prune?: {
 		entries?: unknown;
 		blocks?: unknown;
@@ -64,6 +69,13 @@ function toNumber(value: unknown): number {
 
 function toBoolean(value: unknown): boolean {
 	return typeof value === 'boolean' ? value : false;
+}
+
+function toStringArray(value: unknown): string[] {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	return value.filter((item): item is string => typeof item === 'string');
 }
 
 function normalizeReason(value: unknown): PruningEntry['reason'] {
@@ -118,6 +130,7 @@ function deserializeCompressionBlockView(value: unknown): CompressionBlockView |
 		topic,
 		startId,
 		endId,
+		effectiveToolIds: toStringArray(value.effectiveToolIds),
 		compressedTokens: toNumber(value.compressedTokens),
 		summaryTokens: toNumber(value.summaryTokens),
 		active: toBoolean(value.active),
@@ -224,11 +237,16 @@ export function deserializePruningSessionData(raw: SerializedPruningSessionData)
 		? source.totalSummaryTokens
 		: blocks.reduce((sum, block) => sum + block.summaryTokens, 0);
 
+	const toolIdList = Array.isArray(raw.toolIdList)
+		? raw.toolIdList.filter((id: unknown): id is string => typeof id === 'string')
+		: undefined;
+
 	return {
 		sessionId,
 		entries,
 		blocks,
 		totalPrunedTokens,
 		totalSummaryTokens,
+		prune: toolIdList ? { toolIdList } : undefined,
 	};
 }

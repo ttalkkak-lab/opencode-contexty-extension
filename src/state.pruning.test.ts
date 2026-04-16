@@ -1,3 +1,4 @@
+// @ts-ignore bun:test is provided by the Bun runtime during test execution.
 import { describe, expect, test } from 'bun:test';
 import { deserializePruningSessionData } from './state.pruning';
 
@@ -96,24 +97,38 @@ describe('deserializePruningSessionData', () => {
 		expect(data?.totalSummaryTokens).toBe(150);
 	});
 
-	test('parses tuple-based block entries into CompressionBlockView values', () => {
-		const data = deserializePruningSessionData({
-			sessionId: 'ses_blocks',
-			prune: {
-				tools: [],
-				messages: {
-					blocksById: [
-						[1, { blockId: 1, topic: 'x', startId: 'm001', endId: 'm002', compressedTokens: 11, summaryTokens: 22, active: true, mode: 'range', createdAt: 3, summary: 'x' }],
-						[2, { blockId: 2, topic: 'y', startId: 'm003', endId: 'm004', compressedTokens: 33, summaryTokens: 44, active: false, mode: 'range', createdAt: 4, summary: 'y' }],
-					],
+		test('parses tuple-based block entries into CompressionBlockView values', () => {
+			const data = deserializePruningSessionData({
+				sessionId: 'ses_blocks',
+				prune: {
+					tools: [],
+					messages: {
+						blocksById: [
+							[1, { blockId: 1, topic: 'x', startId: 'm001', endId: 'm002', effectiveToolIds: ['call_1'], compressedTokens: 11, summaryTokens: 22, active: true, mode: 'range', createdAt: 3, summary: 'x' }],
+							[2, { blockId: 2, topic: 'y', startId: 'm003', endId: 'm004', effectiveToolIds: [], compressedTokens: 33, summaryTokens: 44, active: false, mode: 'range', createdAt: 4, summary: 'y' }],
+						],
+					},
 				},
-			},
-		} as any);
+			} as any);
 
-		expect(data?.blocks).toHaveLength(2);
-		expect(data?.blocks[0]).toMatchObject({ blockId: 1, topic: 'x', startId: 'm001', endId: 'm002', compressedTokens: 11, summaryTokens: 22, active: true });
-		expect(data?.blocks[1]).toMatchObject({ blockId: 2, topic: 'y', startId: 'm003', endId: 'm004', compressedTokens: 33, summaryTokens: 44, active: false });
-	});
+			expect(data?.blocks).toHaveLength(2);
+			expect(data?.blocks[0]).toMatchObject({ blockId: 1, topic: 'x', startId: 'm001', endId: 'm002', effectiveToolIds: ['call_1'], compressedTokens: 11, summaryTokens: 22, active: true });
+			expect(data?.blocks[1]).toMatchObject({ blockId: 2, topic: 'y', startId: 'm003', endId: 'm004', effectiveToolIds: [], compressedTokens: 33, summaryTokens: 44, active: false });
+		});
+
+		test('keeps only string effectiveToolIds when deserializing blocks', () => {
+			const data = deserializePruningSessionData({
+				sessionId: 'ses_effective_ids',
+				prune: {
+					tools: [],
+					messages: {
+						blocksById: [[1, { blockId: 1, topic: 'x', startId: 'm001', endId: 'm002', effectiveToolIds: ['call_1', 2, null], compressedTokens: 1, summaryTokens: 1, active: true, mode: 'range', createdAt: 1, summary: 'x' }]],
+					},
+				},
+			} as any);
+
+			expect(data?.blocks[0].effectiveToolIds).toEqual(['call_1']);
+		});
 
 	test('builds deduplication entries from matching tools and toolParameters', () => {
 		const data = deserializePruningSessionData({

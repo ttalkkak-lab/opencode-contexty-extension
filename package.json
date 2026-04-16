@@ -22,6 +22,9 @@
 		"onView:contexty.pruningExplorer"
 	],
 	"main": "./out/extension.js",
+	"dependencies": {
+		"@anthropic-ai/tokenizer": "latest"
+	},
 	"contributes": {
 		"viewsContainers": {
 			"activitybar": [

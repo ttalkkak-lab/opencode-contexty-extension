@@ -5,6 +5,7 @@ import { ContextState, watchPruningState } from './state';
 import { PruningExplorerProvider } from './pruningExplorer';
 import { SelectionLensProvider } from './selectionLens';
 import { ContextHighlights } from './contextHighlights';
+import { CompactedHighlights } from './compactedHighlights';
 import { SessionDiscovery } from './sessionDiscovery';
 import { AcpmDragAndDropController, AcpmExplorerProvider, clonePreset, readPermissionsFile, writePermissionsFile } from './acpmExplorer';
 import { ALL_TOOL_CATEGORIES, type ACPMNode, type FolderAccess, type PermissionsFile, type Preset, type ToolCategory, type ToolPermission } from './acpmNodes';
@@ -43,6 +44,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	const acpmProvider = new AcpmExplorerProvider(context.subscriptions, state);
 	const selectionLens = new SelectionLensProvider();
 	const highlights = new ContextHighlights(state);
+	const compactedHighlights = new CompactedHighlights(state);
 	const sessionDiscovery = new SessionDiscovery(context.subscriptions);
 	const metricsState = new MetricsState(context.subscriptions);
 	const dashboardProvider = new DashboardProvider();
@@ -115,7 +117,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		showCollapseAll: true,
 		dragAndDropController: new AcpmDragAndDropController(acpmProvider)
 	});
-	context.subscriptions.push(treeView, pruningTreeView, acpmTreeView, highlights);
+	context.subscriptions.push(treeView, pruningTreeView, acpmTreeView, highlights, compactedHighlights);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('contexty.dashboard.open', () => {
 			openDashboard();
@@ -149,14 +151,17 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.window.onDidChangeActiveTextEditor(() => {
 			highlights.refreshAll();
+			compactedHighlights.refreshAll();
 		}),
 		vscode.window.onDidChangeVisibleTextEditors(() => {
 			highlights.refreshAll();
+			compactedHighlights.refreshAll();
 		}),
 		vscode.commands.registerCommand('contexty.hscmm.refresh', () => {
 			provider.refresh();
 			pruningProvider.refresh();
 			highlights.refreshAll();
+			compactedHighlights.refreshAll();
 		}),
 		vscode.commands.registerCommand('contexty.acpm.refresh', () => {
 			refreshAcpmView(acpmProvider);
@@ -474,10 +479,11 @@ export async function activate(context: vscode.ExtensionContext) {
 			async (uri: vscode.Uri, selection: vscode.Selection) => {
 				const doc = await vscode.workspace.openTextDocument(uri);
 				await state.addSelectionPart(doc, selection);
-				selectionLens.clearSelection(uri);
-				provider.refresh();
-				highlights.refreshAll();
-			}
+			selectionLens.clearSelection(uri);
+			provider.refresh();
+			highlights.refreshAll();
+			compactedHighlights.refreshAll();
+		}
 		),
 		vscode.commands.registerCommand('contexty.hscmm.removePart', async (node: ContextNode | undefined) => {
 			if (!node || node.type !== 'part' || !node.partId) {
@@ -486,6 +492,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			await state.banPart(node.partId);
 			provider.refresh();
 			highlights.refreshAll();
+			compactedHighlights.refreshAll();
 		}),
 		vscode.commands.registerCommand(
 			'contexty.hscmm.removeFileContext',
@@ -496,8 +503,9 @@ export async function activate(context: vscode.ExtensionContext) {
 				await state.banPartsUnderPath(node.uri);
 				provider.refresh();
 				highlights.refreshAll();
+				compactedHighlights.refreshAll();
 			}
-		),
+			),
 		vscode.commands.registerCommand('contexty.hscmm.resetContext', async () => {
 			const confirmLabel = 'Reset';
 			const decision = await vscode.window.showWarningMessage(
@@ -515,6 +523,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const added = await state.banAllParts();
 			provider.refresh();
 			highlights.refreshAll();
+			compactedHighlights.refreshAll();
 			vscode.window.showInformationMessage(
 				added > 0
 					? `Context reset complete: ${added} part(s) added to blacklist.`
@@ -569,11 +578,12 @@ export async function activate(context: vscode.ExtensionContext) {
 					} catch {
 					}
 			}
-			provider.refresh();
-			highlights.refreshAll();
-		}
-		)
-	);
+				provider.refresh();
+				highlights.refreshAll();
+				compactedHighlights.refreshAll();
+			}
+			)
+		);
 
 	context.subscriptions.push(
 		sessionDiscovery.onDidChangeActiveSession((session) => {
@@ -584,20 +594,22 @@ export async function activate(context: vscode.ExtensionContext) {
 			pruningProvider.refresh();
 			acpmProvider.refresh();
 			highlights.refreshAll();
+			compactedHighlights.refreshAll();
 			updateSessionStatusBar();
 		}),
 			sessionDiscovery.onDidChangeSessions(() => {
 				if (sessionDiscovery.isAutoMode()) {
 					if (sessionDiscovery.getAllSessions().length === 0) {
-						state.setSessionId(undefined);
-						metricsState.setSessionId(undefined);
-						void syncPruningWatcher();
-						provider.refresh();
-						pruningProvider.refresh();
-						acpmProvider.refresh();
-						highlights.refreshAll();
-						updateSessionStatusBar();
-					}
+					state.setSessionId(undefined);
+					metricsState.setSessionId(undefined);
+					void syncPruningWatcher();
+					provider.refresh();
+					pruningProvider.refresh();
+					acpmProvider.refresh();
+					highlights.refreshAll();
+					compactedHighlights.refreshAll();
+					updateSessionStatusBar();
+				}
 					metricsState.setSessionId(state.getSessionId());
 					return;
 				}
@@ -608,6 +620,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					pruningProvider.refresh();
 					acpmProvider.refresh();
 					highlights.refreshAll();
+					compactedHighlights.refreshAll();
 				}
 			})
 		);
@@ -626,6 +639,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		provider.refresh();
 		pruningProvider.refresh();
 		highlights.refreshAll();
+		compactedHighlights.refreshAll();
 		refreshAcpmView(acpmProvider);
 		updateSessionStatusBar();
 	});

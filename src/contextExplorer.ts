@@ -1,5 +1,6 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { ContextState } from './state';
+import { ContextState, type CompressionBlockView } from './state';
 
 export type ContextNodeType = 'root' | 'dir' | 'file' | 'part';
 
@@ -8,10 +9,25 @@ export type ContextNode = {
 	uri: vscode.Uri;
 	label: string;
 	partId?: string;
+	callId?: string;
+	tool?: string;
+	sourcePath?: string;
 	tooltip?: string;
 	partTruncated?: boolean;
+	compacted?: boolean;
+	compactedCount?: number;
 	tokens?: number;
 	percentage?: number;
+	children?: ContextNode[];
+};
+
+type RawContextPart = {
+	id?: string;
+	callID?: string;
+	state?: {
+		input?: { filePath?: string };
+		time?: { start?: number; compacted?: boolean };
+	};
 };
 
 export class ContextDragAndDropController implements vscode.TreeDragAndDropController<ContextNode> {
@@ -113,8 +129,83 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 		this.refreshTimer = setTimeout(() => this.refresh(), 150);
 	}
 
+	private getCompactedCallIds(): Set<string> {
+		return new Set(
+			this.state.compactedParts
+				.map((part) => part.callID)
+				.filter((callID): callID is string => typeof callID === 'string' && callID.length > 0)
+		);
+	}
+
+	private getRawPartsForFile(uri: vscode.Uri): RawContextPart[] {
+		const rawState = this.state as unknown as { partsByFile?: Map<string, RawContextPart[]> };
+		const parts = rawState.partsByFile?.get(uri.toString());
+		if (!Array.isArray(parts)) {
+			return [];
+		}
+		return [...parts].sort((a, b) => {
+			const aTime = a.state?.time?.start ?? 0;
+			const bTime = b.state?.time?.start ?? 0;
+			if (aTime !== bTime) {
+				return aTime - bTime;
+			}
+			return (a.id ?? '').localeCompare(b.id ?? '');
+		});
+	}
+
+	private isCompactedDescendant(node: ContextNode, filePath: string): boolean {
+		const nodePath = node.uri.fsPath.toLowerCase();
+		const normalizedFilePath = filePath.toLowerCase();
+		if (node.type === 'file') {
+			return normalizedFilePath === nodePath || normalizedFilePath.startsWith(`${nodePath}${path.sep}`);
+		}
+		return normalizedFilePath.startsWith(`${nodePath}${path.sep}`);
+	}
+
+	private getCompactedCountForNode(node: ContextNode, compactedCallIds: Set<string>): number {
+		if (node.type !== 'file' && node.type !== 'dir' && node.type !== 'root') {
+			return 0;
+		}
+
+		const rawState = this.state as unknown as { partsByFile?: Map<string, RawContextPart[]> };
+		const partsByFile = rawState.partsByFile;
+		if (!partsByFile) {
+			return 0;
+		}
+
+		let count = 0;
+		for (const parts of partsByFile.values()) {
+			for (const part of parts) {
+				const filePath = part.state?.input?.filePath;
+				const callID = part.callID;
+				if (typeof filePath !== 'string' || typeof callID !== 'string') {
+					continue;
+				}
+				if (!compactedCallIds.has(callID)) {
+					continue;
+				}
+				if (this.isCompactedDescendant(node, filePath)) {
+					count += 1;
+				}
+			}
+		}
+
+		return count;
+	}
+
+	private getCompressionBlockForCallId(callId?: string): CompressionBlockView | undefined {
+		if (typeof callId !== 'string' || callId.length === 0) {
+			return undefined;
+		}
+
+		const rawState = this.state as unknown as { pruningData?: { blocks?: CompressionBlockView[] } };
+		return rawState.pruningData?.blocks?.find((block) => block.effectiveToolIds.includes(callId));
+	}
+
 	getTreeItem(node: ContextNode): vscode.TreeItem {
+		const compactedCallIds = this.getCompactedCallIds();
 		const partCount = node.type === 'file' ? this.state.getPartCountForFile(node.uri) : 0;
+		const compactedCount = this.getCompactedCountForNode(node, compactedCallIds);
 
 		const collapsibleState =
 			node.type === 'file'
@@ -153,11 +244,20 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 			item.iconPath = new vscode.ThemeIcon('folder');
 		}
 		if (node.type === 'part') {
-			item.iconPath = new vscode.ThemeIcon(node.partTruncated === false ? 'symbol-file' : 'symbol-snippet');
+			item.iconPath = node.compacted
+				? new vscode.ThemeIcon('circle-slash')
+				: new vscode.ThemeIcon(node.partTruncated === false ? 'symbol-file' : 'symbol-snippet');
+			if (node.compacted) {
+				item.description = '(compressed)';
+			}
 		}
 
 		if (node.type === 'part') {
+			const compressionBlock = node.compacted ? this.getCompressionBlockForCallId(node.callId) : undefined;
 			item.tooltip = node.tooltip ?? node.label;
+			if (compressionBlock) {
+				item.tooltip = `${item.tooltip}\nCompressed: Original: ${compressionBlock.compressedTokens.toLocaleString()} tokens → Summary: ${compressionBlock.summaryTokens.toLocaleString()} tokens`;
+			}
 			item.command = {
 				command: 'vscode.open',
 				title: 'Open',
@@ -170,6 +270,11 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 			const tok = node.tokens >= 1000 ? `${(node.tokens / 1000).toFixed(1)}k` : `${node.tokens}`;
 			item.description = `${pct.toFixed(1)}%  ~${tok}`;
 			item.tooltip = `${node.label}\n~${node.tokens.toLocaleString()} tokens • ${pct.toFixed(1)}% of context`;
+		}
+
+		if (compactedCount > 0 && node.type !== 'part') {
+			const compactedDescription = `(${compactedCount} compressed)`;
+			item.description = item.description ? `${item.description} • ${compactedDescription}` : compactedDescription;
 		}
 
 		return item;
@@ -201,28 +306,38 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 					})
 				];
 			}
-			return roots.map((root) => {
-				const tokens = this.state.getNodeTokens(root.uri, 'root');
-				return {
-					type: 'root' as const,
-					uri: root.uri,
-					label: root.label,
-					tokens,
-					percentage: totalTokens > 0 ? (tokens / totalTokens) * 100 : 0
-				};
-			});
+			return [
+				...roots.map((root) => {
+					const tokens = this.state.getNodeTokens(root.uri, 'root');
+					return {
+						type: 'root' as const,
+						uri: root.uri,
+						label: root.label,
+						tokens,
+						percentage: totalTokens > 0 ? (tokens / totalTokens) * 100 : 0
+					};
+				})
+			];
 		}
 
 		if (node.type === 'file') {
 			const parts = this.state.getPartsForFile(node.uri);
-			return parts.map((part) => ({
-				type: 'part',
-				uri: node.uri,
-				label: part.label,
-				partId: part.id,
-				tooltip: part.tooltip,
-				partTruncated: part.truncated
-			}));
+			const rawParts = this.getRawPartsForFile(node.uri);
+			const compactedCallIds = this.getCompactedCallIds();
+			return parts.map((part, index) => {
+				const rawPart = rawParts[index];
+				const callId = rawPart?.callID;
+				return {
+					type: 'part' as const,
+					uri: node.uri,
+					label: part.label,
+					partId: part.id,
+					callId,
+					tooltip: part.tooltip,
+					partTruncated: part.truncated,
+					compacted: typeof callId === 'string' ? compactedCallIds.has(callId) : false
+				};
+			});
 		}
 
 		const children = this.state.getChildrenForPath(node.uri);

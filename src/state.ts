@@ -8,7 +8,6 @@ import {
 	type PruningSessionData,
 	type SerializedPruningSessionData,
 } from './state.pruning.js';
-
 export { deserializePruningSessionData } from './state.pruning.js';
 export type { CompressionBlockView, PruningEntry, PruningSessionData } from './state.pruning.js';
 
@@ -25,7 +24,7 @@ type ToolPart = {
 		output?: string;
 		title?: string;
 		metadata?: { preview: string; truncated: boolean };
-		time?: { start: number; end: number };
+		time?: { start: number; end: number; compacted?: boolean };
 	};
 	metadata?: Record<string, unknown>;
 };
@@ -207,6 +206,8 @@ export class ContextState {
 	private checked = new Map<string, string>();
 	private banned = new Set<string>();
 	private partsByFile = new Map<string, ToolPart[]>();
+	private pruningData: PruningSessionData | null = null;
+	public compactedParts: ToolPart[] = [];
 	private readonly roots: Array<{
 		rootUri: vscode.Uri;
 		rootFsPathLower: string;
@@ -338,14 +339,14 @@ export class ContextState {
 		}
 		let total = 0;
 		for (const part of parts) {
-			const output = typeof part.state.output === 'string' ? part.state.output : '';
-			total += Math.ceil(output.length / 4);
+			total += this.getPartTokens(part);
 		}
 		return total;
 	}
 
 	private getDirTokens(dirUri: vscode.Uri): number {
 		const dirPath = dirUri.fsPath.toLowerCase();
+		const countedBlocks = new Set<number>();
 		let total = 0;
 		for (const [key, parts] of this.partsByFile.entries()) {
 			let fileUri: vscode.Uri;
@@ -358,19 +359,18 @@ export class ContextState {
 				continue;
 			}
 			for (const part of parts) {
-				const output = typeof part.state.output === 'string' ? part.state.output : '';
-				total += Math.ceil(output.length / 4);
+				total += this.getPartTokens(part, countedBlocks);
 			}
 		}
 		return total;
 	}
 
 	getTotalTokens(): number {
+		const countedBlocks = new Set<number>();
 		let total = 0;
 		for (const parts of this.partsByFile.values()) {
 			for (const part of parts) {
-				const output = typeof part.state.output === 'string' ? part.state.output : '';
-				total += Math.ceil(output.length / 4);
+				total += this.getPartTokens(part, countedBlocks);
 			}
 		}
 		return total;
@@ -398,8 +398,7 @@ export class ContextState {
 			}
 			let tokens = 0;
 			for (const part of parts) {
-				const output = typeof part.state.output === 'string' ? part.state.output : '';
-				tokens += Math.ceil(output.length / 4);
+				tokens += this.getPartTokens(part);
 			}
 			const relPath = vscode.workspace.asRelativePath(fileUri, false);
 			stats.push({
@@ -827,12 +826,22 @@ export class ContextState {
 		this.checked = new Map();
 		this.banned = new Set();
 		this.partsByFile = new Map();
+		this.compactedParts = [];
+		this.pruningData = null;
 
 		const pattern = this.currentSessionId
 			? `**/.contexty/sessions/${this.currentSessionId}/tool-parts.json`
 			: '**/.contexty/tool-parts.json';
 		const toolPartUris = await vscode.workspace.findFiles(pattern, '**/node_modules/**');
+		console.log('[DEBUG contexty] pattern:', pattern, 'found files:', toolPartUris.length);
 		for (const partsUri of toolPartUris) {
+			const workspaceRoot = this.currentSessionId
+				? path.dirname(path.dirname(path.dirname(path.dirname(partsUri.fsPath))))
+				: path.dirname(path.dirname(partsUri.fsPath));
+			const pruningData = await loadPruningHistory(workspaceRoot, this.getEffectiveSessionId());
+			this.pruningData = pruningData;
+			const toolIdList = new Set<string>(pruningData?.prune?.toolIdList ?? []);
+			console.log('[DEBUG contexty] pruningData sessionId:', pruningData?.sessionId, 'toolIdList count:', toolIdList.size);
 			const contextDirUri = vscode.Uri.file(path.dirname(partsUri.fsPath));
 			const banUri = vscode.Uri.joinPath(contextDirUri, 'tool-parts.blacklist.json');
 			let localBlacklist = new Set<string>();
@@ -900,8 +909,30 @@ export class ContextState {
 				const list = this.partsByFile.get(key) ?? [];
 				list.push(toolPart);
 				this.partsByFile.set(key, list);
+				if (toolPart.state.time?.compacted === true && toolIdList.has(toolPart.callID)) {
+					console.log('[DEBUG contexty] COMPACTED part found:', part.tool, part.callID, 'in toolIdList:', toolIdList.has(part.callID));
+					this.compactedParts.push(toolPart);
+				}
 			}
 		}
+	}
+
+	private getPartTokens(part: ToolPart, countedBlocks?: Set<number>): number {
+		if (part.state.time?.compacted) {
+			for (const block of this.pruningData?.blocks ?? []) {
+				if (block.summaryTokens > 0) {
+					if (countedBlocks?.has(block.blockId)) {
+						return 0;
+					}
+					countedBlocks?.add(block.blockId);
+					return block.summaryTokens;
+				}
+			}
+			return 0;
+		}
+
+		const output = typeof part.state.output === 'string' ? part.state.output : '';
+		return Math.round(output.length / 4);
 	}
 
 	private getEffectiveSessionId(): string {
