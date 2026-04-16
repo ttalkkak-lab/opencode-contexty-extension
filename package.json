@@ -8,6 +8,7 @@
 		"url": "https://github.com/ttalkkak-lab/opencode-contexty-extension"
 	},
 	"readme": "./README.md",
+	"icon": "./logo.png",
 	"version": "0.0.3",
 	"engines": {
 		"vscode": "^1.108.0"
