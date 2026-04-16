@@ -9,6 +9,7 @@
 	},
 	"readme": "./README.md",
 	"version": "0.0.4",
+	"icon": "./logo.png",
 	"engines": {
 		"vscode": "^1.108.0"
 	},
