@@ -2,7 +2,7 @@ export interface PruningEntry {
 	callId: string;
 	tool: string;
 	turn: number;
-	reason: 'deduplication' | 'purge-errors';
+	reason: 'deduplication' | 'purgeErrors';
 	tokenCount?: number;
 	error?: string;
 }
@@ -79,7 +79,7 @@ function toStringArray(value: unknown): string[] {
 }
 
 function normalizeReason(value: unknown): PruningEntry['reason'] {
-	return value === 'purge-errors' ? 'purge-errors' : 'deduplication';
+	return value === 'purgeErrors' ? 'purgeErrors' : 'deduplication';
 }
 
 function deserializePruningEntry(value: unknown): PruningEntry | null {
@@ -141,23 +141,35 @@ function deserializeCompressionBlockView(value: unknown): CompressionBlockView |
 }
 
 function parseToolTuple(value: unknown): [string, number] | null {
-	if (!Array.isArray(value) || value.length !== 2) return null;
+	if (!Array.isArray(value) || value.length !== 2) {
+		return null;
+	}
 	const [callId, turn] = value;
-	if (typeof callId !== 'string' || typeof turn !== 'number') return null;
+	if (typeof callId !== 'string' || typeof turn !== 'number') {
+		return null;
+	}
 	return [callId, turn];
 }
 
 function parseBlockTuple(value: unknown): [number, unknown] | null {
-	if (!Array.isArray(value) || value.length !== 2) return null;
+	if (!Array.isArray(value) || value.length !== 2) {
+		return null;
+	}
 	const [id, block] = value;
-	if (typeof id !== 'number' || !isRecord(block)) return null;
+	if (typeof id !== 'number' || !isRecord(block)) {
+		return null;
+	}
 	return [id, block];
 }
 
 function parseToolParamTuple(value: unknown): [string, Record<string, unknown>] | null {
-	if (!Array.isArray(value) || value.length !== 2) return null;
+	if (!Array.isArray(value) || value.length !== 2) {
+		return null;
+	}
 	const [callId, params] = value;
-	if (typeof callId !== 'string' || !isRecord(params)) return null;
+	if (typeof callId !== 'string' || !isRecord(params)) {
+		return null;
+	}
 	return [callId, params];
 }
 
@@ -173,9 +185,13 @@ export function deserializePruningSessionData(raw: SerializedPruningSessionData)
 	if (messages && Array.isArray(messages.blocksById)) {
 		for (const item of messages.blocksById) {
 			const tuple = parseBlockTuple(item);
-			if (!tuple) continue;
+			if (!tuple) {
+				continue;
+			}
 			const block = deserializeCompressionBlockView(tuple[1]);
-			if (block) blocks.push(block);
+			if (block) {
+				blocks.push(block);
+			}
 		}
 	}
 
@@ -189,7 +205,9 @@ export function deserializePruningSessionData(raw: SerializedPruningSessionData)
 	if (Array.isArray(raw.toolParameters)) {
 		for (const item of raw.toolParameters) {
 			const tuple = parseToolParamTuple(item);
-			if (tuple) toolParamsMap.set(tuple[0], tuple[1]);
+			if (tuple) {
+				toolParamsMap.set(tuple[0], tuple[1]);
+			}
 		}
 	}
 
@@ -197,7 +215,9 @@ export function deserializePruningSessionData(raw: SerializedPruningSessionData)
 	if (Array.isArray(source.tools)) {
 		for (const item of source.tools) {
 			const tuple = parseToolTuple(item);
-			if (!tuple) continue;
+			if (!tuple) {
+				continue;
+			}
 			const [callId, turn] = tuple;
 			const params = toolParamsMap.get(callId);
 			const tool = params ? toString(params.tool) : '';
@@ -206,7 +226,7 @@ export function deserializePruningSessionData(raw: SerializedPruningSessionData)
 				callId,
 				tool,
 				turn,
-				reason: status === 'error' ? 'purge-errors' : 'deduplication',
+				reason: status === 'error' ? 'purgeErrors' : 'deduplication',
 			};
 
 			if (typeof params?.tokenCount === 'number' && Number.isFinite(params.tokenCount)) {

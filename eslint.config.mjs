@@ -24,4 +24,19 @@ export default [{
         "no-throw-literal": "warn",
         semi: "warn",
     },
+}, {
+    files: ["src/**/*.ts"],
+    ignores: ["src/**/*.test.ts", "src/**/*.integration.test.ts", "src/integration/**"],
+
+    rules: {
+        "no-console": "error",
+        "@typescript-eslint/no-explicit-any": "error",
+    },
+}, {
+    files: ["src/**/*.test.ts", "src/**/*.integration.test.ts", "src/integration/**"],
+
+    rules: {
+        "no-console": "off",
+        "@typescript-eslint/no-explicit-any": "off",
+    },
 }];

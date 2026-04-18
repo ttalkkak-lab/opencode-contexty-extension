@@ -1,7 +1,7 @@
 {
 	"name": "contexty-hscmm",
-	"displayName": "Contexty (HSCMM)",
-	"description": "HSCMM feature for Contexty",
+	"displayName": "Contexty",
+	"description": "VS Code integration for Contexty session context, ACPM, and pruning workflows",
 	"publisher": "ttalkkak-lab",
 	"repository": {
 		"type": "git",
@@ -24,7 +24,7 @@
 	],
 	"main": "./out/extension.js",
 	"dependencies": {
-		"@anthropic-ai/tokenizer": "latest"
+		"@anthropic-ai/tokenizer": "^0.0.4"
 	},
 	"contributes": {
 		"viewsContainers": {
@@ -266,17 +266,20 @@
 			]
 		},
 		"configuration": {
-			"title": "Contexty HSCMM",
+			"title": "Contexty",
 			"properties": {}
 		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"watch": "tsc -watch -p ./",
 		"pretest": "npm run compile && npm run lint",
 		"lint": "eslint src",
-		"test": "vscode-test"
+		"test": "vscode-test",
+		"deadcode": "tsc -p tsconfig.check.json --noEmit",
+		"check": "npm run typecheck && npm run lint && npm test && npm run deadcode"
 	},
 	"devDependencies": {
 		"@types/vscode": "^1.108.1",

@@ -171,11 +171,11 @@ export class PruningExplorerProvider implements vscode.TreeDataProvider<PruningE
 				},
 				{
 					type: 'category',
-					label: `Purged Errors (${data.entries.filter((entry) => entry.reason === 'purge-errors').length})`,
+					label: `Purged Errors (${data.entries.filter((entry) => entry.reason === 'purgeErrors').length})`,
 					tooltip: 'Purged error tool calls',
 					contextValue: 'contexty.pruning.category',
 					children: data.entries
-						.filter((entry) => entry.reason === 'purge-errors')
+						.filter((entry) => entry.reason === 'purgeErrors')
 						.map((entry) => ({
 							type: 'error-entry' as const,
 							label: buildErrorLabel(entry),

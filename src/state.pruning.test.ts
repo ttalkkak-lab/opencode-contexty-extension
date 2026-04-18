@@ -44,7 +44,7 @@ describe('deserializePruningSessionData', () => {
 		expect(data?.totalPrunedTokens).toBe(5000);
 		expect(data?.totalSummaryTokens).toBe(50);
 		expect(data?.entries[0]).toMatchObject({ tool: 'read', callId: 'call_abc123', turn: 8, reason: 'deduplication' });
-		expect(data?.entries[1]).toMatchObject({ reason: 'purge-errors', error: 'file not found' });
+		expect(data?.entries[1]).toMatchObject({ reason: 'purgeErrors', error: 'file not found' });
 	});
 
 	test('returns empty collections for empty pruning data', () => {
@@ -147,7 +147,7 @@ describe('deserializePruningSessionData', () => {
 			toolParameters: [['call_err', { tool: 'write', status: 'error', turn: 4, error: 'boom' }]],
 		} as any);
 
-		expect(data?.entries[0]).toMatchObject({ tool: 'write', reason: 'purge-errors', error: 'boom' });
+		expect(data?.entries[0]).toMatchObject({ tool: 'write', reason: 'purgeErrors', error: 'boom' });
 	});
 
 	test('keeps backward compatibility with flat prune.blocks arrays', () => {
