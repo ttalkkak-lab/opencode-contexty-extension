@@ -1,6 +1,6 @@
-# Contexty (HSCMM)
+# Contexty
 
-A Visual Studio Code extension that provides enhanced context management capabilities for developers. This extension allows you to select, organize, and track code snippets and files as contextual references in your workspace.
+A Visual Studio Code extension for Contexty session context, ACPM visibility, and pruning-aware workspace navigation.
 
 ## Features
 
@@ -90,13 +90,17 @@ The extension provides the following commands:
 
 ## Storage Structure
 
-Context data is stored in your workspace under `.contexty/`:
+Context data is stored in your workspace under `.contexty/sessions/<sessionId>/`:
 
 ```
 .contexty/
-├── tool-parts.json              # Main context storage
-└── tool-parts.blacklist.json    # Removed items
+└── sessions/
+    └── <sessionId>/
+        ├── tool-parts.json              # Main context storage
+        └── tool-parts.blacklist.json    # Removed items
 ```
+
+The legacy root files `.contexty/tool-parts.json` and `.contexty/tool-parts.blacklist.json` are read for backward compatibility only.
 
 ### tool-parts.json Format
 
@@ -274,4 +278,4 @@ Please refer to the LICENSE file in the repository for licensing information.
 
 ---
 
-**Enjoy enhanced context management with Contexty (HSCMM)!** 🚀
+**Enjoy working with Contexty in VS Code.**
