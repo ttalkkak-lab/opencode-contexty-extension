@@ -36,7 +36,7 @@ export class ContextDragAndDropController implements vscode.TreeDragAndDropContr
 
 	constructor(private readonly state: ContextState, private readonly provider: ContextExplorerProvider) { }
 
-	async handleDrop(target: ContextNode | undefined, dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
+	async handleDrop(_target: ContextNode | undefined, dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
 		const uriList = dataTransfer.get('text/uri-list');
 		if (!uriList) {
 			return;
@@ -95,7 +95,7 @@ export class ContextDragAndDropController implements vscode.TreeDragAndDropContr
 		this.provider.refresh();
 	}
 
-	handleDrag(source: ContextNode[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): void {
+	handleDrag(_source: ContextNode[], _dataTransfer: vscode.DataTransfer, _token: vscode.CancellationToken): void {
 	}
 }
 

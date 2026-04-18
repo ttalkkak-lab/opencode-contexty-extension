@@ -13,8 +13,8 @@ mock.module('vscode', () => ({
 }));
 
 const { ContextState } = await import('./state');
-const { countTokens: dcpCountTokens } = await import('../../opencode-contexty/src/dcp/token-utils');
-const { countTokens: extensionCountTokens } = await import('./token-utils');
+const { countTokens: dcpCountTokens } = await import('../../opencode-contexty/src/dcp/tokenUtils');
+const { countTokens: extensionCountTokens } = await import('./tokenUtils');
 
 type PartLike = {
 	callID: string;

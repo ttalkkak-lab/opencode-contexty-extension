@@ -29,7 +29,6 @@ type ToolPart = {
 	metadata?: Record<string, unknown>;
 };
 
-const STATE_KEY = 'contexty.hscmm.state';
 const SESSION_KEY = 'contexty.hscmm.sessionId';
 
 function asKey(uri: vscode.Uri): string {
@@ -206,14 +205,11 @@ export class ContextState {
 	private checked = new Map<string, string>();
 	private banned = new Set<string>();
 	private partsByFile = new Map<string, ToolPart[]>();
-	private pruningData: PruningSessionData | null = null;
+	private pruningDataByWorkspace = new Map<string, PruningSessionData>();
 	public compactedParts: ToolPart[] = [];
 	private readonly roots: Array<{
 		rootUri: vscode.Uri;
 		rootFsPathLower: string;
-		contextDirUri: vscode.Uri;
-		partsUri: vscode.Uri;
-		banUri: vscode.Uri;
 	}>;
 	private readonly sessionId: string;
 	private currentSessionId: string | undefined;
@@ -225,17 +221,10 @@ export class ContextState {
 		this.sessionId = this.loadOrCreateSessionId();
 		this.roots = (workspaceFolders ?? [])
 			.filter((wf) => wf.uri.scheme === 'file')
-			.map((wf) => {
-				const rootFsPathLower = wf.uri.fsPath.toLowerCase();
-				const contextDirUri = this.getContextDirUri(wf.uri);
-				return {
-					rootUri: wf.uri,
-					rootFsPathLower,
-					contextDirUri,
-					partsUri: this.getPartsUri(wf.uri),
-					banUri: this.getBanUri(wf.uri)
-				};
-			});
+			.map((wf) => ({
+				rootUri: wf.uri,
+				rootFsPathLower: wf.uri.fsPath.toLowerCase()
+			}));
 		this.load();
 		void this.ensureGitignoreForRoots();
 		void this.refreshFromDisk().then(() => this.writeCheckedFile());
@@ -267,6 +256,7 @@ export class ContextState {
 
 	setSessionId(sessionId: string | undefined): void {
 		this.currentSessionId = sessionId;
+		void this.refreshFromDisk();
 	}
 
 	getRootsWithParts(): Array<{ uri: vscode.Uri; label: string }> {
@@ -736,6 +726,7 @@ export class ContextState {
 
 		const banned = [...this.banned];
 		banned.sort((a, b) => (a || "").localeCompare(b || ""));
+		const effectiveSessionId = this.getEffectiveSessionId();
 
 		for (const { rootUri, rootFsPathLower } of this.roots) {
 			const contextDirUri = this.getContextDirUri(rootUri);
@@ -750,10 +741,19 @@ export class ContextState {
 				const raw = await vscode.workspace.fs.readFile(partsUri);
 				const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as { parts?: unknown[] };
 				if (Array.isArray(parsed.parts)) {
-					existingParts = parsed.parts.filter((p: any): p is ToolPart =>
-						typeof p?.id === 'string' &&
-						typeof p?.state?.input?.filePath === 'string'
-					);
+					existingParts = parsed.parts.filter((part): part is ToolPart => {
+						if (!part || typeof part !== 'object') {
+							return false;
+						}
+						const candidate = part as {
+							id?: unknown;
+							state?: { input?: { filePath?: unknown } };
+						};
+						return (
+							typeof candidate.id === 'string' &&
+							typeof candidate.state?.input?.filePath === 'string'
+						);
+					});
 				}
 			} catch {
 			}
@@ -783,7 +783,7 @@ export class ContextState {
 				const callId = generateCustomId('call');
 				const part: ToolPart = {
 					id,
-					sessionID: this.sessionId,
+					sessionID: effectiveSessionId,
 					messageID: messageId,
 					type: 'tool',
 					callID: callId,
@@ -820,6 +820,7 @@ export class ContextState {
 		this.checked = new Map();
 		this.banned = new Set();
 		this.partsByFile = new Map();
+		this.pruningDataByWorkspace = new Map();
 	}
 
 	private async syncCheckedFromExternalParts(): Promise<void> {
@@ -827,21 +828,35 @@ export class ContextState {
 		this.banned = new Set();
 		this.partsByFile = new Map();
 		this.compactedParts = [];
-		this.pruningData = null;
+		this.pruningDataByWorkspace = new Map();
 
-		const pattern = this.currentSessionId
-			? `**/.contexty/sessions/${this.currentSessionId}/tool-parts.json`
-			: '**/.contexty/tool-parts.json';
-		const toolPartUris = await vscode.workspace.findFiles(pattern, '**/node_modules/**');
-		console.log('[DEBUG contexty] pattern:', pattern, 'found files:', toolPartUris.length);
+		const effectiveSessionId = this.getEffectiveSessionId();
+		const [sessionToolPartUris, legacyToolPartUris] = await Promise.all([
+			vscode.workspace.findFiles(
+				`**/.contexty/sessions/${effectiveSessionId}/tool-parts.json`,
+				'**/node_modules/**'
+			),
+			vscode.workspace.findFiles('**/.contexty/tool-parts.json', '**/node_modules/**')
+		]);
+		const sessionWorkspaceRoots = new Set(
+			sessionToolPartUris.map((uri) => this.getWorkspaceRootFromPartsUri(uri))
+		);
+		const toolPartUris = [
+			...sessionToolPartUris,
+			...legacyToolPartUris.filter(
+				(uri) =>
+					!sessionWorkspaceRoots.has(this.getWorkspaceRootFromPartsUri(uri)) &&
+					!sessionToolPartUris.some((sessionUri) => sessionUri.fsPath === uri.fsPath)
+			)
+		];
+
 		for (const partsUri of toolPartUris) {
-			const workspaceRoot = this.currentSessionId
-				? path.dirname(path.dirname(path.dirname(path.dirname(partsUri.fsPath))))
-				: path.dirname(path.dirname(partsUri.fsPath));
-			const pruningData = await loadPruningHistory(workspaceRoot, this.getEffectiveSessionId());
-			this.pruningData = pruningData;
+			const workspaceRoot = this.getWorkspaceRootFromPartsUri(partsUri);
+			const pruningData = await loadPruningHistory(workspaceRoot, effectiveSessionId);
+			if (pruningData) {
+				this.pruningDataByWorkspace.set(workspaceRoot, pruningData);
+			}
 			const toolIdList = new Set<string>(pruningData?.prune?.toolIdList ?? []);
-			console.log('[DEBUG contexty] pruningData sessionId:', pruningData?.sessionId, 'toolIdList count:', toolIdList.size);
 			const contextDirUri = vscode.Uri.file(path.dirname(partsUri.fsPath));
 			const banUri = vscode.Uri.joinPath(contextDirUri, 'tool-parts.blacklist.json');
 			let localBlacklist = new Set<string>();
@@ -910,7 +925,6 @@ export class ContextState {
 				list.push(toolPart);
 				this.partsByFile.set(key, list);
 				if (toolPart.state.time?.compacted === true && toolIdList.has(toolPart.callID)) {
-					console.log('[DEBUG contexty] COMPACTED part found:', part.tool, part.callID, 'in toolIdList:', toolIdList.has(part.callID));
 					this.compactedParts.push(toolPart);
 				}
 			}
@@ -919,7 +933,7 @@ export class ContextState {
 
 	private getPartTokens(part: ToolPart, countedBlocks?: Set<number>): number {
 		if (part.state.time?.compacted) {
-			for (const block of this.pruningData?.blocks ?? []) {
+			for (const block of this.getPruningBlocksForPart(part)) {
 				if (block.summaryTokens > 0) {
 					if (countedBlocks?.has(block.blockId)) {
 						return 0;
@@ -944,9 +958,7 @@ export class ContextState {
 	}
 
 	private getContextDirUri(rootUri: vscode.Uri): vscode.Uri {
-		return this.currentSessionId
-			? vscode.Uri.joinPath(rootUri, '.contexty', 'sessions', this.currentSessionId)
-			: vscode.Uri.joinPath(rootUri, '.contexty');
+		return vscode.Uri.joinPath(rootUri, '.contexty', 'sessions', this.getEffectiveSessionId());
 	}
 
 	private getPartsUri(rootUri: vscode.Uri): vscode.Uri {
@@ -955,6 +967,29 @@ export class ContextState {
 
 	private getBanUri(rootUri: vscode.Uri): vscode.Uri {
 		return vscode.Uri.joinPath(this.getContextDirUri(rootUri), 'tool-parts.blacklist.json');
+	}
+
+	private getWorkspaceRootFromPartsUri(partsUri: vscode.Uri): string {
+		const sessionMarker = `${path.sep}.contexty${path.sep}sessions${path.sep}`;
+		const sessionIndex = partsUri.fsPath.indexOf(sessionMarker);
+		if (sessionIndex >= 0) {
+			return partsUri.fsPath.slice(0, sessionIndex);
+		}
+		return path.dirname(path.dirname(partsUri.fsPath));
+	}
+
+	private getPruningBlocksForPart(part: ToolPart): CompressionBlockView[] {
+		const filePath = part.state.input?.filePath;
+		if (typeof filePath !== 'string') {
+			return [];
+		}
+
+		const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath));
+		if (!workspaceFolder) {
+			return [];
+		}
+
+		return this.pruningDataByWorkspace.get(workspaceFolder.uri.fsPath)?.blocks ?? [];
 	}
 
 	private loadOrCreateSessionId(): string {

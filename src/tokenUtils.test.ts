@@ -1,7 +1,7 @@
 // @ts-ignore bun:test is provided by the Bun runtime during test execution.
 import { describe, expect, mock, test } from 'bun:test';
 
-import { countTokens as dcpCountTokens } from '../../opencode-contexty/src/dcp/token-utils';
+import { countTokens as dcpCountTokens } from '../../opencode-contexty/src/dcp/tokenUtils';
 
 mock.module('@anthropic-ai/tokenizer', () => ({
   countTokens: mock((text: string) => {
@@ -13,9 +13,9 @@ mock.module('@anthropic-ai/tokenizer', () => ({
   }),
 }));
 
-const { countTokens } = await import('./token-utils');
+const { countTokens } = await import('./tokenUtils');
 
-describe('token-utils', () => {
+describe('tokenUtils', () => {
   test('countTokens returns correct count for English text', () => {
     expect(countTokens('Hello world')).toBe(2);
   });
