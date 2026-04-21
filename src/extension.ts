@@ -13,6 +13,7 @@ import { DashboardProvider } from './dashboard/dashboardProvider';
 import { MetricsState } from './dashboard/metricsState';
 import { openPruningSettingsPanel } from './ui/pruningSettings';
 import { registerPruningCommands } from './commands/pruning';
+import { ContextFileSync } from './contextFileSync';
 
 function refreshAcpmView(provider: AcpmExplorerProvider): void {
 	provider.refresh();
@@ -49,6 +50,19 @@ export async function activate(context: vscode.ExtensionContext) {
 	const metricsState = new MetricsState(context.subscriptions);
 	const dashboardProvider = new DashboardProvider();
 	let dashboardPanel: vscode.WebviewPanel | undefined;
+
+	const refreshContextViews = (options?: { refreshAcpm?: boolean; updateStatusBar?: boolean }) => {
+		provider.refresh();
+		pruningProvider.refresh();
+		highlights.refreshAll();
+		compactedHighlights.refreshAll();
+		if (options?.refreshAcpm) {
+			acpmProvider.refresh();
+		}
+		if (options?.updateStatusBar) {
+			updateSessionStatusBar();
+		}
+	};
 
 	const syncPruningWatcher = async (): Promise<void> => {
 		const sessionId = state.getSessionId();
@@ -118,6 +132,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		dragAndDropController: new AcpmDragAndDropController(acpmProvider)
 	});
 	context.subscriptions.push(treeView, pruningTreeView, acpmTreeView, highlights, compactedHighlights);
+	context.subscriptions.push(
+		new ContextFileSync(state, () => {
+			refreshContextViews();
+		})
+	);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('contexty.dashboard.open', () => {
 			openDashboard();
@@ -450,23 +469,18 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (selected === autoItem) {
 				sessionDiscovery.setAutoMode(true);
 				await sessionDiscovery.refresh();
-				} else {
-					sessionDiscovery.setAutoMode(false);
-					const sessionId = selected.sessionId;
-					if (!sessionId) {
-						return;
-					}
-					state.setSessionId(sessionId);
-					metricsState.setSessionId(sessionId);
-					void syncPruningWatcher();
-					pruningProvider.refresh();
+			} else {
+				sessionDiscovery.setAutoMode(false);
+				const sessionId = selected.sessionId;
+				if (!sessionId) {
+					return;
 				}
-
-			provider.refresh();
-			pruningProvider.refresh();
-			acpmProvider.refresh();
-			highlights.refreshAll();
-			updateSessionStatusBar();
+				state.setSessionId(sessionId);
+				metricsState.setSessionId(sessionId);
+				await state.refreshFromDisk();
+				void syncPruningWatcher();
+				refreshContextViews({ refreshAcpm: true, updateStatusBar: true });
+			}
 		}),
 		vscode.commands.registerCommand('contexty.hscmm.addSelectionToContextWithCurrent', async () => {
 			const editor = vscode.window.activeTextEditor;
@@ -586,42 +600,27 @@ export async function activate(context: vscode.ExtensionContext) {
 		);
 
 	context.subscriptions.push(
-		sessionDiscovery.onDidChangeActiveSession((session) => {
+		sessionDiscovery.onDidChangeActiveSession(async (session) => {
 			state.setSessionId(session.sessionId);
 			metricsState.setSessionId(session.sessionId);
+			await state.refreshFromDisk();
 			void syncPruningWatcher();
-			provider.refresh();
-			pruningProvider.refresh();
-			acpmProvider.refresh();
-			highlights.refreshAll();
-			compactedHighlights.refreshAll();
-			updateSessionStatusBar();
+			refreshContextViews({ refreshAcpm: true, updateStatusBar: true });
 		}),
-			sessionDiscovery.onDidChangeSessions(() => {
+			sessionDiscovery.onDidChangeSessions(async () => {
 				if (sessionDiscovery.isAutoMode()) {
 					if (sessionDiscovery.getAllSessions().length === 0) {
-					state.setSessionId(undefined);
-					metricsState.setSessionId(undefined);
-					void syncPruningWatcher();
-					provider.refresh();
-					pruningProvider.refresh();
-					acpmProvider.refresh();
-					highlights.refreshAll();
-					compactedHighlights.refreshAll();
+						state.setSessionId(undefined);
+						metricsState.setSessionId(undefined);
+						await state.refreshFromDisk();
+						void syncPruningWatcher();
+						refreshContextViews({ refreshAcpm: true, updateStatusBar: true });
+						return;
+					}
 					updateSessionStatusBar();
-				}
-					metricsState.setSessionId(state.getSessionId());
 					return;
 				}
-				if (!sessionDiscovery.isAutoMode()) {
-					metricsState.setSessionId(state.getSessionId());
-					void syncPruningWatcher();
-					provider.refresh();
-					pruningProvider.refresh();
-					acpmProvider.refresh();
-					highlights.refreshAll();
-					compactedHighlights.refreshAll();
-				}
+				updateSessionStatusBar();
 			})
 		);
 
@@ -629,19 +628,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	if (activeSession) {
 		state.setSessionId(activeSession.sessionId);
 		metricsState.setSessionId(activeSession.sessionId);
+		await state.refreshFromDisk();
 		void syncPruningWatcher();
-		pruningProvider.refresh();
+		refreshContextViews();
 	}
 	updateSessionStatusBar();
 	openDashboard();
 
 	void state.refreshFromDisk().then(() => {
-		provider.refresh();
-		pruningProvider.refresh();
-		highlights.refreshAll();
-		compactedHighlights.refreshAll();
-		refreshAcpmView(acpmProvider);
-		updateSessionStatusBar();
+		refreshContextViews({ refreshAcpm: true, updateStatusBar: true });
 	});
 }
 

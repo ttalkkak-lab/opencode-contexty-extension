@@ -10,6 +10,7 @@ export interface SessionInfo {
 export class SessionDiscovery {
 	private sessions: SessionInfo[] = [];
 	private autoMode = true;
+	private activeSessionId: string | undefined;
 	private readonly _onDidChangeSessions = new vscode.EventEmitter<void>();
 	readonly onDidChangeSessions = this._onDidChangeSessions.event;
 	private readonly _onDidChangeActiveSession = new vscode.EventEmitter<SessionInfo>();
@@ -27,6 +28,9 @@ export class SessionDiscovery {
 
 	setAutoMode(enabled: boolean): void {
 		this.autoMode = enabled;
+		if (!enabled) {
+			this.activeSessionId = undefined;
+		}
 	}
 
 	toggleAutoMode(): void {
@@ -46,7 +50,13 @@ export class SessionDiscovery {
 	async refresh(): Promise<void> {
 		this.sessions = await this.discoverSessions();
 		if (this.autoMode && this.sessions.length > 0) {
-			this._onDidChangeActiveSession.fire(this.sessions[0]);
+			const activeSession = this.sessions[0];
+			if (this.activeSessionId !== activeSession.sessionId) {
+				this.activeSessionId = activeSession.sessionId;
+				this._onDidChangeActiveSession.fire(activeSession);
+			}
+		} else if (this.sessions.length === 0) {
+			this.activeSessionId = undefined;
 		}
 		this._onDidChangeSessions.fire();
 	}

@@ -103,30 +103,13 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 	private readonly treeChangeEmitter = new vscode.EventEmitter<ContextNode | undefined | null | void>();
 	readonly onDidChangeTreeData = this.treeChangeEmitter.event;
 
-	private refreshTimer: NodeJS.Timeout | undefined;
-
 	constructor(
 		private readonly state: ContextState,
 		private readonly disposables: vscode.Disposable[]
-	) {
-		const watcher = vscode.workspace.createFileSystemWatcher('**/*');
-		this.disposables.push(
-			watcher,
-			watcher.onDidCreate(() => this.refreshSoon()),
-			watcher.onDidChange(() => this.refreshSoon()),
-			watcher.onDidDelete(() => this.refreshSoon())
-		);
-	}
+	) {}
 
 	refresh(): void {
 		this.treeChangeEmitter.fire();
-	}
-
-	private refreshSoon(): void {
-		if (this.refreshTimer) {
-			clearTimeout(this.refreshTimer);
-		}
-		this.refreshTimer = setTimeout(() => this.refresh(), 150);
 	}
 
 	private getCompactedCallIds(): Set<string> {
@@ -285,13 +268,12 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 			return [];
 		}
 
-		const totalTokens = this.state.getTotalTokens();
-
 		if (!node) {
 			if (!this.state.getSessionId()) {
 				return [{ type: 'root' as const, uri: vscode.Uri.parse(''), label: 'No active session', tooltip: 'Select a session to view context' }];
 			}
 			await this.state.refreshFromDisk();
+			const totalTokens = this.state.getTotalTokens();
 			const roots = this.state.getRootsWithParts();
 			if (roots.length === 1) {
 				const children = this.state.getChildrenForPath(roots[0].uri);
@@ -340,6 +322,7 @@ export class ContextExplorerProvider implements vscode.TreeDataProvider<ContextN
 			});
 		}
 
+		const totalTokens = this.state.getTotalTokens();
 		const children = this.state.getChildrenForPath(node.uri);
 		return [
 			...children.dirs.map((dir) => {

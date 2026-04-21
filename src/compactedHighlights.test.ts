@@ -3,12 +3,18 @@ import { describe, expect, mock, test } from 'bun:test';
 
 mock.module('vscode', () => {
 	class Range {
+		readonly start: { line: number; character: number };
+		readonly end: { line: number; character: number };
+
 		constructor(
 			public readonly startLine: number,
 			public readonly startCharacter: number,
 			public readonly endLine: number,
 			public readonly endCharacter: number
-		) {}
+		) {
+			this.start = { line: startLine, character: startCharacter };
+			this.end = { line: endLine, character: endCharacter };
+		}
 	}
 
 	const createTextEditorDecorationType = mock(() => ({ dispose() {} }));
@@ -70,5 +76,28 @@ describe('CompactedHighlights', () => {
 		highlights.refreshAll();
 
 		expect(setDecorations).toHaveBeenCalledWith(expect.anything(), []);
+	});
+
+	test('skips redundant decoration updates when the compacted state is unchanged', () => {
+		const setDecorations = mock(() => undefined);
+		const editor = {
+			document: {
+				uri: { scheme: 'file', fsPath: '/workspace/src/app.ts' },
+				lineCount: 2,
+				lineAt: (line: number) => ({ range: { end: { character: line === 1 ? 3 : 0 } } }),
+			},
+			setDecorations,
+		};
+		(vscode.window.visibleTextEditors as unknown as typeof editor[]) = [editor];
+
+		const state = {
+			compactedParts: [{ state: { input: { filePath: '/workspace/src/app.ts' } } }],
+		} as any;
+
+		const highlights = new CompactedHighlights(state);
+		highlights.refreshAll();
+		highlights.refreshAll();
+
+		expect(setDecorations).toHaveBeenCalledTimes(1);
 	});
 });

@@ -207,6 +207,9 @@ export class ContextState {
 	private partsByFile = new Map<string, ToolPart[]>();
 	private pruningDataByWorkspace = new Map<string, PruningSessionData>();
 	public compactedParts: ToolPart[] = [];
+	private refreshVersion = 0;
+	private appliedRefreshVersion = 0;
+	private refreshInFlight: Promise<void> | undefined;
 	private readonly roots: Array<{
 		rootUri: vscode.Uri;
 		rootFsPathLower: string;
@@ -256,7 +259,6 @@ export class ContextState {
 
 	setSessionId(sessionId: string | undefined): void {
 		this.currentSessionId = sessionId;
-		void this.refreshFromDisk();
 	}
 
 	getRootsWithParts(): Array<{ uri: vscode.Uri; label: string }> {
@@ -498,17 +500,17 @@ export class ContextState {
 	}
 
 	async banPart(partId: string): Promise<void> {
-		await this.syncCheckedFromExternalParts();
+		await this.refreshFromDisk();
 		if (this.banned.has(partId)) {
 			return;
 		}
 		this.banned.add(partId);
 		await this.writeCheckedFile();
-		await this.syncCheckedFromExternalParts();
+		await this.refreshFromDisk();
 	}
 
 	async banPartsUnderPath(baseUri: vscode.Uri): Promise<void> {
-		await this.syncCheckedFromExternalParts();
+		await this.refreshFromDisk();
 		const basePath = baseUri.fsPath;
 		const baseLower = basePath.toLowerCase();
 		let changed = false;
@@ -533,12 +535,12 @@ export class ContextState {
 
 		if (changed) {
 			await this.writeCheckedFile();
-			await this.syncCheckedFromExternalParts();
+			await this.refreshFromDisk();
 		}
 	}
 
 	async banAllParts(): Promise<number> {
-		await this.syncCheckedFromExternalParts();
+		await this.refreshFromDisk();
 
 		let added = 0;
 		for (const parts of this.partsByFile.values()) {
@@ -552,14 +554,24 @@ export class ContextState {
 
 		if (added > 0) {
 			await this.writeCheckedFile();
-			await this.syncCheckedFromExternalParts();
+			await this.refreshFromDisk();
 		}
 
 		return added;
 	}
 
 	async refreshFromDisk(): Promise<void> {
-		await this.syncCheckedFromExternalParts();
+		const requestedVersion = ++this.refreshVersion;
+
+		while (this.appliedRefreshVersion < requestedVersion) {
+			if (!this.refreshInFlight) {
+				const targetVersion = this.refreshVersion;
+				this.refreshInFlight = this.syncCheckedFromExternalParts(targetVersion).finally(() => {
+					this.refreshInFlight = undefined;
+				});
+			}
+			await this.refreshInFlight;
+		}
 	}
 
 	async addFilePart(uri: vscode.Uri): Promise<void> {
@@ -567,7 +579,7 @@ export class ContextState {
 			return;
 		}
 
-		await this.syncCheckedFromExternalParts();
+		await this.refreshFromDisk();
 
 		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
 		const root = this.roots.find((entry) => entry.rootUri.toString() === workspaceFolder?.uri.toString());
@@ -621,7 +633,7 @@ export class ContextState {
 		}
 		await vscode.workspace.fs.writeFile(partsUri, partsContents);
 
-		await this.syncCheckedFromExternalParts();
+		await this.refreshFromDisk();
 	}
 
 	async addSelectionPart(
@@ -632,7 +644,7 @@ export class ContextState {
 			return;
 		}
 
-		await this.syncCheckedFromExternalParts();
+		await this.refreshFromDisk();
 
 		const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
 		const root = this.roots.find((entry) => entry.rootUri.toString() === workspaceFolder?.uri.toString());
@@ -708,7 +720,7 @@ export class ContextState {
 		}
 		await vscode.workspace.fs.writeFile(partsUri, partsContents);
 
-		await this.syncCheckedFromExternalParts();
+		await this.refreshFromDisk();
 	}
 
 	private async writeCheckedFile(): Promise<void> {
@@ -821,15 +833,29 @@ export class ContextState {
 		this.banned = new Set();
 		this.partsByFile = new Map();
 		this.pruningDataByWorkspace = new Map();
+		this.compactedParts = [];
 	}
 
-	private async syncCheckedFromExternalParts(): Promise<void> {
-		this.checked = new Map();
-		this.banned = new Set();
-		this.partsByFile = new Map();
-		this.compactedParts = [];
-		this.pruningDataByWorkspace = new Map();
+	private async syncCheckedFromExternalParts(targetVersion: number): Promise<void> {
+		const snapshot = await this.readExternalSnapshot();
+		if (snapshot) {
+			this.applySnapshot(snapshot);
+		}
+		this.appliedRefreshVersion = targetVersion;
+	}
 
+	private async readExternalSnapshot(): Promise<{
+		checked: Map<string, string>;
+		banned: Set<string>;
+		partsByFile: Map<string, ToolPart[]>;
+		compactedParts: ToolPart[];
+		pruningDataByWorkspace: Map<string, PruningSessionData>;
+	} | undefined> {
+		const checked = new Map<string, string>();
+		const banned = new Set<string>();
+		const partsByFile = new Map<string, ToolPart[]>();
+		const compactedParts: ToolPart[] = [];
+		const pruningDataByWorkspace = new Map<string, PruningSessionData>();
 		const effectiveSessionId = this.getEffectiveSessionId();
 		const [sessionToolPartUris, legacyToolPartUris] = await Promise.all([
 			vscode.workspace.findFiles(
@@ -854,7 +880,7 @@ export class ContextState {
 			const workspaceRoot = this.getWorkspaceRootFromPartsUri(partsUri);
 			const pruningData = await loadPruningHistory(workspaceRoot, effectiveSessionId);
 			if (pruningData) {
-				this.pruningDataByWorkspace.set(workspaceRoot, pruningData);
+				pruningDataByWorkspace.set(workspaceRoot, pruningData);
 			}
 			const toolIdList = new Set<string>(pruningData?.prune?.toolIdList ?? []);
 			const contextDirUri = vscode.Uri.file(path.dirname(partsUri.fsPath));
@@ -866,7 +892,7 @@ export class ContextState {
 				if (Array.isArray(banParsed.ids)) {
 					for (const id of banParsed.ids) {
 						if (typeof id === 'string') {
-							this.banned.add(id);
+							banned.add(id);
 							localBlacklist.add(id);
 						}
 					}
@@ -884,7 +910,7 @@ export class ContextState {
 			try {
 				parsed = JSON.parse(Buffer.from(raw).toString('utf8'));
 			} catch {
-				continue;
+				return undefined;
 			}
 			const parts = (parsed as { parts?: unknown }).parts;
 			if (!Array.isArray(parts)) {
@@ -901,7 +927,7 @@ export class ContextState {
 					continue;
 				}
 				const id = typeof p.id === 'string' ? p.id : generateCustomId('prt');
-				if (localBlacklist.has(id) || this.banned.has(id)) {
+				if (localBlacklist.has(id) || banned.has(id)) {
 					continue;
 				}
 				const output = typeof state?.output === 'string' ? state.output : '';
@@ -921,14 +947,30 @@ export class ContextState {
 						input: { filePath }
 					}
 				};
-				const list = this.partsByFile.get(key) ?? [];
+				const list = partsByFile.get(key) ?? [];
 				list.push(toolPart);
-				this.partsByFile.set(key, list);
+				partsByFile.set(key, list);
 				if (toolPart.state.time?.compacted === true && toolIdList.has(toolPart.callID)) {
-					this.compactedParts.push(toolPart);
+					compactedParts.push(toolPart);
 				}
 			}
 		}
+
+		return { checked, banned, partsByFile, compactedParts, pruningDataByWorkspace };
+	}
+
+	private applySnapshot(snapshot: {
+		checked: Map<string, string>;
+		banned: Set<string>;
+		partsByFile: Map<string, ToolPart[]>;
+		compactedParts: ToolPart[];
+		pruningDataByWorkspace: Map<string, PruningSessionData>;
+	}): void {
+		this.checked = snapshot.checked;
+		this.banned = snapshot.banned;
+		this.partsByFile = snapshot.partsByFile;
+		this.compactedParts = snapshot.compactedParts;
+		this.pruningDataByWorkspace = snapshot.pruningDataByWorkspace;
 	}
 
 	private getPartTokens(part: ToolPart, countedBlocks?: Set<number>): number {

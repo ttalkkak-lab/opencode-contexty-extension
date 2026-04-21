@@ -8,6 +8,7 @@ function normalizeFsPath(fsPath: string): string {
 
 export class CompactedHighlights implements vscode.Disposable {
 	private readonly decoration: vscode.TextEditorDecorationType;
+	private readonly appliedSignatures = new WeakMap<vscode.TextEditor, string>();
 
 	constructor(private readonly state: ContextState) {
 		this.decoration = vscode.window.createTextEditorDecorationType({
@@ -51,11 +52,21 @@ export class CompactedHighlights implements vscode.Disposable {
 
 		const compactedFilePaths = this.getCompactedFilePaths();
 		if (!compactedFilePaths.has(normalizeFsPath(editor.document.uri.fsPath))) {
+			if (this.appliedSignatures.get(editor) === 'none') {
+				return;
+			}
 			editor.setDecorations(this.decoration, []);
+			this.appliedSignatures.set(editor, 'none');
 			return;
 		}
 
-		editor.setDecorations(this.decoration, [this.getFullDocumentRange(editor.document)]);
+		const range = this.getFullDocumentRange(editor.document);
+		const signature = `full:${range.start.line}:${range.start.character}:${range.end.line}:${range.end.character}`;
+		if (this.appliedSignatures.get(editor) === signature) {
+			return;
+		}
+		editor.setDecorations(this.decoration, [range]);
+		this.appliedSignatures.set(editor, signature);
 	}
 
 	dispose(): void {
