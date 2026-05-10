@@ -633,7 +633,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		refreshContextViews();
 	}
 	updateSessionStatusBar();
-	openDashboard();
+	if (vscode.workspace.getConfiguration('contexty').get<boolean>('dashboard.autoOpen', false)) {
+		openDashboard();
+	}
 
 	void state.refreshFromDisk().then(() => {
 		refreshContextViews({ refreshAcpm: true, updateStatusBar: true });
