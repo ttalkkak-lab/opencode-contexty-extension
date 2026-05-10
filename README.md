@@ -247,7 +247,9 @@ npm run lint
 
 ## Extension Settings
 
-Currently, this extension does not contribute any custom settings. All functionality works out-of-the-box.
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `contexty.dashboard.autoOpen` | `false` | Automatically open the Session Insight dashboard when a session is detected on startup. |
 
 ## Known Limitations
 

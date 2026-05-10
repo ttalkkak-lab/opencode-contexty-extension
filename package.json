@@ -267,7 +267,13 @@
 		},
 		"configuration": {
 			"title": "Contexty",
-			"properties": {}
+			"properties": {
+				"contexty.dashboard.autoOpen": {
+					"type": "boolean",
+					"default": false,
+					"description": "Automatically open the Session Insight dashboard when a session is detected on startup."
+				}
+			}
 		}
 	},
 	"scripts": {
